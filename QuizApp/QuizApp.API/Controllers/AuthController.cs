@@ -1,5 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using QuizApp.QuizApp.Core.Interfaces.IRepositories;
+﻿using Azure.Core;
+using Microsoft.AspNetCore.Mvc;
+using QuizApp.QuizApp.Core.Entities;
+using QuizApp.QuizApp.Core.Interfaces;
 using QuizApp.QuizApp.Shared.DTOs;
 
 namespace QuizApp.QuizApp.API.Controllers
@@ -16,91 +18,24 @@ namespace QuizApp.QuizApp.API.Controllers
         }
 
         [HttpPost("register")]
-        public async Task<ActionResult<AuthResponseDto>> Register([FromBody] RegisterDto registerDto)
+        public async Task<IActionResult> Register([FromBody] RegisterDto registerDto)
         {
-            var ipAddress = GetIpAddress();
-            var response = await _authService.RegisterAsync(registerDto, ipAddress);
-            SetRefreshTokenCookie(response.RefreshToken);
-            return Ok(response);
+            var result = await _authService.RegisterAsync(registerDto);
+            return Ok(result);
         }
 
         [HttpPost("login")]
-        public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginDto loginDto)
+        public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
         {
-            var ipAddress = GetIpAddress();
-            var response = await _authService.LoginAsync(loginDto, ipAddress);
-            SetRefreshTokenCookie(response.RefreshToken);
-            return Ok(response);
+            var result = await _authService.LoginAsync(loginDto);
+            return Ok(result);
         }
 
         [HttpPost("refresh-token")]
-        public async Task<ActionResult<AuthResponseDto>> RefreshToken()
+        public async Task<IActionResult> Refresh([FromBody] RefreshTokenDto refreshTokenDto)
         {
-            var refreshToken = Request.Cookies["refreshToken"];
-            if (string.IsNullOrEmpty(refreshToken))
-                return BadRequest(new { message = "Refresh token is required" });
-
-            var ipAddress = GetIpAddress();
-            var response = await _authService.RefreshTokenAsync(refreshToken, ipAddress);
-            SetRefreshTokenCookie(response.RefreshToken);
-            return Ok(response);
-        }
-
-        [HttpPost("revoke-token")]
-        public async Task<IActionResult> RevokeToken([FromBody] RefreshTokenDto model)
-        {
-            var token = model.Token ?? Request.Cookies["refreshToken"];
-            if (string.IsNullOrEmpty(token))
-                return BadRequest(new { message = "Token is required" });
-
-            var ipAddress = GetIpAddress();
-            await _authService.RevokeTokenAsync(token, ipAddress);
-            return Ok(new { message = "Token revoked" });
-        }
-
-        [HttpPost("forgot-password")]
-        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto forgotPasswordDto)
-        {
-            await _authService.ForgotPasswordAsync(forgotPasswordDto);
-            return Ok(new { message = "Password reset email sent" });
-        }
-
-        [HttpPost("reset-password")]
-        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto resetPasswordDto)
-        {
-            var result = await _authService.ResetPasswordAsync(resetPasswordDto);
-            return result
-                ? Ok(new { message = "Password reset successful" })
-                : BadRequest(new { message = "Error resetting password" });
-        }
-
-        [HttpGet("verify-email")]
-        public async Task<IActionResult> VerifyEmail(string userId, string token)
-        {
-            var result = await _authService.VerifyEmailAsync(userId, token);
-            return result
-                ? Ok(new { message = "Email verified successfully" })
-                : BadRequest(new { message = "Error verifying email" });
-        }
-
-        private string GetIpAddress()
-        {
-            if (Request.Headers.ContainsKey("X-Forwarded-For"))
-                return Request.Headers["X-Forwarded-For"];
-            else
-                return HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString();
-        }
-
-        private void SetRefreshTokenCookie(string token)
-        {
-            var cookieOptions = new CookieOptions
-            {
-                HttpOnly = true,
-                Expires = System.DateTime.UtcNow.AddDays(7),
-                SameSite = SameSiteMode.Strict,
-                Secure = true
-            };
-            Response.Cookies.Append("refreshToken", token, cookieOptions);
+            var result = await _authService.RefreshTokenAsync(refreshTokenDto);
+            return Ok(result);
         }
     }
 }

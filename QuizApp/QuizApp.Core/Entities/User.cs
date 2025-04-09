@@ -1,35 +1,38 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace QuizApp.QuizApp.Core.Entities
 {
-    public class ApplicationUser 
+    [Table("users")]
+    public class User
     {
-        public string Id { get; set; } = "";
-        public string UserName { get; set; } = "";
-        public string Email { get; set; } = "";
-        public string FirstName { get; set; } = "";
-        public string LastName { get; set; } = "";
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-        public DateTime? LastLogin { get; set; }
-        public ICollection<Quiz>? CreatedQuizzes { get; set; }
-        public ICollection<QuizAttempt>? QuizAttempts { get; set; }
-        public ICollection<RefreshToken>? RefreshTokens { get; set; }
-    }
-
-    public class RefreshToken
-    {
+        [Key]
+        [Column("user_id")]
         public int Id { get; set; }
-        public required string Token { get; set; }
-        public DateTime Expires { get; set; }
-        public bool IsExpired => DateTime.UtcNow >= Expires;
-        public DateTime Created { get; set; }
-        public string CreatedByIp { get; set; } = "";
-        public DateTime? Revoked { get; set; }
-        public string RevokedByIp { get; set; } = "";
-        public string ReplacedByToken { get; set; } = "";
-        public bool IsActive => Revoked == null && !IsExpired;
-        public string UserId { get; set; } = "";
-        public ApplicationUser? User { get; set; }   
+
+        [Required]
+        [EmailAddress(ErrorMessage = "Invalid email format.")]
+        [StringLength(255, ErrorMessage = "Email cannot exceed 255 characters.")]
+        [Column("email")]
+        public string Email { get; set; } = "";
+
+        [Required]
+        [StringLength(255, ErrorMessage = "Password hash cannot exceed 255 characters.")]
+        [Column("password_hash")]
+        public string PasswordHash { get; set; } = "";
+
+        [Required]
+        [Column("full_name")]
+        public string FullName { get; set; } = "";
+
+        [Required]
+        [Column("role")]
+        public string Role { get; set; } = "User"; // User | Admin
+
+        [Required]
+        [Column("created_at")]
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }

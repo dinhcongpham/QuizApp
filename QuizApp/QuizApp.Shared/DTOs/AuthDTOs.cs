@@ -9,30 +9,19 @@ namespace QuizApp.QuizApp.Shared.DTOs
         public string Email { get; set; } = "";
 
         [Required]
-        [StringLength(100, MinimumLength = 6)]
+        [StringLength(100, MinimumLength = 8)]
         public string Password { get; set; } = "";
 
-        [Required]
-        [Compare("Password")]
-        public string ConfirmPassword { get; set; } = "";
-
-        [Required]
         [StringLength(50)]
-        public string FirstName { get; set; } = "";
+        public string FullName { get; set; } = "";
+        public string Role { get; set; } = "User";
 
-        [Required]
-        [StringLength(50)]
-        public string LastName { get; set; } = "";
-
-        [Required]
-        [StringLength(50)]
-        public string Username { get; set; } = "";
     }
 
     public class LoginDto
     {
         [Required]
-        public string Username { get; set; } = "";
+        public string Email { get; set; } = "";
 
         [Required]
         public string Password { get; set; } = "";
@@ -40,20 +29,15 @@ namespace QuizApp.QuizApp.Shared.DTOs
 
     public class AuthResponseDto
     {
-        public string? Id { get; set; }
-        public string? FirstName { get; set; }
-        public string? LastName { get; set; }
-        public string? Username { get; set; }
-        public string? Email { get; set; }
-        public string? Token { get; set; }
-        public string? RefreshToken { get; set; }
-        public DateTime TokenExpires { get; set; }
+        public string AccessToken { get; set; } = string.Empty;
+        public string RefreshToken { get; set; } = string.Empty;
+        public DateTime RefreshTokenExpiryDay { get; set; }
     }
 
     public class RefreshTokenDto
     {
         [Required]
-        public string Token { get; set; } = "";
+        public string RefreshToken { get; set; } = "";
     }
 
     public class ForgotPasswordDto
