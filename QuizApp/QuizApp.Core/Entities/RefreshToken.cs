@@ -25,5 +25,8 @@ namespace QuizApp.QuizApp.Core.Entities
         [Required]
         [Column("expires_at")]
         public DateTime ExpiresAt { get; set; }
+
+        // Navigation
+        public User? User { get; set; }
     }
 }
