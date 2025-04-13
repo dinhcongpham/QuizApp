@@ -7,7 +7,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace QuizApp.QuizApp.Infrastructure.Repositories
+namespace QuizApp.QuizApp.Infrastructure.Services
 {
     public class TokenService : ITokenService
     {
@@ -33,6 +33,7 @@ namespace QuizApp.QuizApp.Infrastructure.Repositories
 
             return new AuthResponseDto
             {
+                UserId = userId,
                 AccessToken = accessToken,
                 RefreshToken = refreshToken,
                 RefreshTokenExpiryDay = DateTime.UtcNow.AddDays(int.Parse(_configuration["Jwt:RefreshTokenExpiryDays"]))

@@ -6,6 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using QuizApp.QuizApp.Core.Interfaces;
 using QuizApp.QuizApp.Infrastructure.Repositories;
+using QuizApp.QuizApp.Infrastructure.Services;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -50,6 +51,8 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IQuizService, QuizService>();
+
 
 var app = builder.Build();
 
