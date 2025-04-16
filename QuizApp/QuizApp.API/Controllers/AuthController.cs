@@ -21,7 +21,11 @@ namespace QuizApp.QuizApp.API.Controllers
         public async Task<IActionResult> Register([FromBody] RegisterDto registerDto)
         {
             var result = await _authService.RegisterAsync(registerDto);
-            return Ok(new { message = "User registered successfully"});
+            if (result == null)
+            {
+                return Conflict("User already exists");
+            }
+            return Ok(result);
         }
 
         [HttpPost("login")]

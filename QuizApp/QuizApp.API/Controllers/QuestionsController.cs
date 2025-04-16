@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using QuizApp.QuizApp.Core.Interfaces;
 using QuizApp.QuizApp.Shared.DTOs;
 
@@ -17,6 +18,7 @@ namespace QuizApp.QuizApp.API.Controllers
 
         // POST: api/questions
         [HttpPost]
+        [Authorize]
         public async Task<IActionResult> Create([FromBody] CreateQuestionDto dto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -27,6 +29,7 @@ namespace QuizApp.QuizApp.API.Controllers
 
         // GET: api/questions/{id}
         [HttpGet("{id}")]
+        [Authorize]
         public async Task<IActionResult> GetById(int id)
         {
             var question = await _questionService.GetByIdAsync(id);
@@ -36,6 +39,7 @@ namespace QuizApp.QuizApp.API.Controllers
 
         // GET: api/questions/quiz/{quizId}
         [HttpGet("quiz/{quizId}")]
+        [Authorize]
         public async Task<IActionResult> GetByQuizId(int quizId)
         {
             var questions = await _questionService.GetByQuizIdAsync(quizId);
@@ -44,6 +48,7 @@ namespace QuizApp.QuizApp.API.Controllers
 
         // PUT: api/questions/{id}
         [HttpPut("{id}")]
+        [Authorize]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateQuestionDto dto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -54,6 +59,7 @@ namespace QuizApp.QuizApp.API.Controllers
 
         // DELETE: api/questions/{id}
         [HttpDelete("{id}")]
+        [Authorize]
         public async Task<IActionResult> Delete(int id)
         {
             var deleted = await _questionService.DeleteAsync(id);

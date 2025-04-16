@@ -5,7 +5,7 @@ namespace QuizApp.QuizApp.Core.Interfaces
 {
     public interface IAuthService
     {
-        Task<User> RegisterAsync(RegisterDto registerDto);
+        Task<AuthResponseDto> RegisterAsync(RegisterDto registerDto);
         Task<AuthResponseDto> LoginAsync(LoginDto loginDto);
         Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenDto refreshTokenDto);
     }

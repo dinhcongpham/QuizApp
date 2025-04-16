@@ -19,7 +19,7 @@ namespace QuizApp.QuizApp.Infrastructure.Repositories
             _passwordHasher = passwordHasher;
         }
 
-        public async Task<User?> GetByIdAsync(string id)
+        public async Task<User?> GetByIdAsync(int id)
         {
             return await _dbContext.Users.FindAsync(id);
         }
@@ -85,9 +85,9 @@ namespace QuizApp.QuizApp.Infrastructure.Repositories
             return await _dbContext.SaveChangesAsync();
         }
 
-        public async Task<int> DeleteUser(Guid userId)
+        public async Task<int> DeleteUser(int userId)
         {
-            var user = await GetByIdAsync(userId.ToString());
+            var user = await GetByIdAsync(userId);
             if (user != null)
             {
                 _dbContext.Users.Remove(user);

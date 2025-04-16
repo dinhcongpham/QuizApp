@@ -17,10 +17,7 @@
 
   <ItemGroup>
     <Folder Include="QuizApp.API\Hubs\" />
-    <Folder Include="QuizApp.Core\Services\" />
     <Folder Include="QuizApp.Tests\" />
-    <Folder Include="QuizApp.Infrastructure\Services\" />
-    <Folder Include="QuizApp.Shared\Helpers\" />
     <Folder Include="QuizApp.Shared\Constants\" />
   </ItemGroup>
 

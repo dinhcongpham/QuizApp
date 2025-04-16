@@ -1,4 +1,5 @@
 ﻿using Azure.Core;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using QuizApp.QuizApp.Core.Entities;
 using QuizApp.QuizApp.Core.Interfaces;
@@ -18,15 +19,20 @@ namespace QuizApp.QuizApp.API.Controllers
         }
 
         // GET: api/quiz
-        [HttpGet]
-        public async Task<IActionResult> GetAll()
+
+        [HttpGet("users/{userId}")]
+        [Authorize]
+        public async Task<ActionResult<List<QuizResponseDto>>> GetAll(int userId)
         {
-            var quizzes = await _quizService.GetAllAsync();
+            var quizzes = await _quizService.GetAllAsync(userId);
+            if (quizzes == null || quizzes.Count == 0)
+                return NotFound(new { message = "No quizzes found for this user." });
             return Ok(quizzes);
         }
 
         // GET: api/quiz/{id}
         [HttpGet("{id}")]
+        [Authorize]
         public async Task<IActionResult> GetById(int id)
         {
             var quiz = await _quizService.GetByIdAsync(id);
@@ -37,6 +43,7 @@ namespace QuizApp.QuizApp.API.Controllers
 
         // POST: api/quiz
         [HttpPost]
+        [Authorize]
         public async Task<IActionResult> Create([FromBody] CreateQuizDto dto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -47,6 +54,7 @@ namespace QuizApp.QuizApp.API.Controllers
 
         // PUT: api/quiz/{id}
         [HttpPut("{id}")]
+        [Authorize]
         public async Task<IActionResult> Update(int id, [FromBody] CreateQuizDto dto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -59,6 +67,7 @@ namespace QuizApp.QuizApp.API.Controllers
 
         // DELETE: api/quiz/{id}
         [HttpDelete("{id}")]
+        [Authorize]
         public async Task<IActionResult> Delete(int id)
         {
             var deleted = await _quizService.DeleteAsync(id);

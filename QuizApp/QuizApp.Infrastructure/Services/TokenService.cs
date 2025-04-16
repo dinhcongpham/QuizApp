@@ -13,27 +13,32 @@ namespace QuizApp.QuizApp.Infrastructure.Services
     {
         private readonly IConfiguration _configuration;
         private readonly IRefreshTokenRepository _refreshTokenRepository;
+        private readonly IUserRepository _userRepository;
 
-        public TokenService(IConfiguration configuration, IRefreshTokenRepository refreshTokenRepository)
+        public TokenService(IConfiguration configuration, IRefreshTokenRepository refreshTokenRepository, IUserRepository userRepository)
         {
             _configuration = configuration;
             _refreshTokenRepository = refreshTokenRepository;
+            _userRepository = userRepository;
         }
 
-        public AuthResponseDto GenerateTokens(int userId)
+        public async Task<AuthResponseDto> GenerateTokens(int userId)
         {
             // Generate access token
-            var accessToken = GenerateAccessToken(userId);
+            var accessToken =  GenerateAccessToken(userId);
 
             // Generate refresh token
-            var refreshToken = GenerateRefreshToken();
+            var refreshToken =  GenerateRefreshToken();
 
             // Store refresh token in database (important for security!)
-            StoreRefreshToken(userId, refreshToken);
+            await StoreRefreshToken(userId, refreshToken);
+
+            var user = await _userRepository.GetByIdAsync(userId);
 
             return new AuthResponseDto
             {
                 UserId = userId,
+                FullName = user.FullName, 
                 AccessToken = accessToken,
                 RefreshToken = refreshToken,
                 RefreshTokenExpiryDay = DateTime.UtcNow.AddDays(int.Parse(_configuration["Jwt:RefreshTokenExpiryDays"]))
@@ -49,7 +54,7 @@ namespace QuizApp.QuizApp.Infrastructure.Services
             {
             new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-        };
+            };
 
             var token = new JwtSecurityToken(
                 issuer: _configuration["Jwt:Issuer"],
@@ -70,11 +75,11 @@ namespace QuizApp.QuizApp.Infrastructure.Services
             return Convert.ToBase64String(randomNumber);
         }
 
-        public void StoreRefreshToken(int userId, string refreshToken)
+        public async Task StoreRefreshToken(int userId, string refreshToken)
         {
             // Store in database with userId, refreshToken, creation time, expiry time
             // This is just a placeholder - implement your database logic here
-            _refreshTokenRepository.Add(new RefreshToken
+            await _refreshTokenRepository.Add(new RefreshToken
             {
                 UserId = userId,
                 Token = refreshToken,

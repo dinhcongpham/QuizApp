@@ -15,9 +15,10 @@ namespace QuizApp.QuizApp.Infrastructure.Services
             _context = context;
         }
 
-        public async Task<List<QuizResponseDto>> GetAllAsync()
+        public async Task<List<QuizResponseDto>> GetAllAsync(int userId)
         {
             return await _context.Quizs
+                .Where(q => q.OwnerId == userId)
                 .Select(q => new QuizResponseDto
                 {
                     QuizId = q.Id,
@@ -73,11 +74,15 @@ namespace QuizApp.QuizApp.Infrastructure.Services
 
         public async Task<bool> DeleteAsync(int id)
         {
-            var quiz = await _context.Quizs.FindAsync(id);
+            var quiz = await _context.Quizs
+                .Include(q => q.Questions)
+                .FirstOrDefaultAsync(q => q.Id == id);
+
             if (quiz == null) return false;
 
             _context.Quizs.Remove(quiz);
             await _context.SaveChangesAsync();
+
             return true;
         }
     }

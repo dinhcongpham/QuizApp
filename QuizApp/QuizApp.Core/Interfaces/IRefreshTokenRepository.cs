@@ -8,5 +8,6 @@ namespace QuizApp.QuizApp.Core.Interfaces
         public Task Add(RefreshToken refreshTokenDto);
         public Task<RefreshToken?> GetByToken(string token);
         public Task Delete(string token);
+        public Task<RefreshToken> GetByUserIdAsync(int userId);
     }
 }

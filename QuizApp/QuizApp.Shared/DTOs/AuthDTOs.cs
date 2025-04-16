@@ -30,6 +30,7 @@ namespace QuizApp.QuizApp.Shared.DTOs
     public class AuthResponseDto
     {
         public int UserId { get; set; }
+        public string FullName { get; set; } = "";
         public string AccessToken { get; set; } = string.Empty;
         public string RefreshToken { get; set; } = string.Empty;
         public DateTime RefreshTokenExpiryDay { get; set; }

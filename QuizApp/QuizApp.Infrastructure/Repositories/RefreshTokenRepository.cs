@@ -34,5 +34,11 @@ namespace QuizApp.QuizApp.Infrastructure.Repositories
                 await _context.SaveChangesAsync();
             }
         }
+
+        public async Task<RefreshToken?> GetByUserIdAsync(int userId)
+        {
+            return await _context.RefreshTokens
+                .FirstOrDefaultAsync(rt => rt.UserId == userId);
+        }
     }
 }

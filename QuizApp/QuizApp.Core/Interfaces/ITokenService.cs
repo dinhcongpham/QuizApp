@@ -4,9 +4,9 @@ namespace QuizApp.QuizApp.Core.Interfaces
 {
     public interface ITokenService
     {
-        public AuthResponseDto GenerateTokens(int userId);
+        Task<AuthResponseDto> GenerateTokens(int userId);
         public string GenerateAccessToken(int userId);
         public string GenerateRefreshToken();
-        public void StoreRefreshToken(int userId, string refreshToken);
+        Task StoreRefreshToken(int userId, string refreshToken);
     }
 }

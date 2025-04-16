@@ -12,7 +12,7 @@ using System.Text;
 
 namespace QuizApp.QuizApp.Infrastructure.Services
 {
-    public class AuthService : IAuthService
+    public class AuthService : IAuthService // Inherit from ControllerBase
     {
         private readonly IUserRepository _userRepository;
         private readonly IConfiguration _configuration;
@@ -34,13 +34,20 @@ namespace QuizApp.QuizApp.Infrastructure.Services
             _refreshTokenRepository = refreshTokenRepository;
         }
 
-        public async Task<User?> RegisterAsync(RegisterDto registerDto)
+        public async Task<AuthResponseDto> RegisterAsync(RegisterDto registerDto)
         {
-            // Check if user exists
             if (await _userRepository.EmailExistsAsync(registerDto.Email))
-                throw new Exception("Email is already registered");
+                return null;
 
-            return await _userRepository.CreateUser(registerDto);
+            var user = await _userRepository.CreateUser(registerDto);
+
+            if (user == null)
+                return null;
+
+            // Generate tokens
+            var tokenResponse = await _tokenService.GenerateTokens(user.Id);
+
+            return tokenResponse;
         }
 
         public async Task<AuthResponseDto> LoginAsync(LoginDto loginDto)
@@ -51,8 +58,14 @@ namespace QuizApp.QuizApp.Infrastructure.Services
             if (user == null)
                 throw new ArgumentException("Invalid username or password");
 
+            var existingTokens = await _refreshTokenRepository.GetByUserIdAsync(user.Id);
+            if (existingTokens != null)
+            {
+                await _refreshTokenRepository.Delete(existingTokens.Token);
+            }
+
             // Generate tokens
-            var tokenResponse = _tokenService.GenerateTokens(user.Id);
+            var tokenResponse = await _tokenService.GenerateTokens(user.Id);
 
             return tokenResponse;
         }
@@ -69,7 +82,7 @@ namespace QuizApp.QuizApp.Infrastructure.Services
             await _refreshTokenRepository.Delete(refreshTokenDto.RefreshToken);
 
             // Generate new tokens
-            var tokenResponse = _tokenService.GenerateTokens(refreshToken.UserId);
+            var tokenResponse = await _tokenService.GenerateTokens(refreshToken.UserId);
 
             return tokenResponse;
         }
