@@ -49,20 +49,26 @@ namespace QuizApp.QuizApp.Shared.DTOs
         public string Email { get; set; } = "";
     }
 
-    public class ResetPasswordDto
+    public class  ChangeUserNameDto
     {
         [Required]
-        public string UserId { get; set; } = "";
+        public int UserId { get; set; }
 
         [Required]
-        public string Token { get; set; } = "";
+        public string FullName { get; set; } = "";
+    }
+
+    public class ChangePasswordDto
+    {
+        [Required]
+        public int UserId { get; set; }
 
         [Required]
-        [StringLength(100, MinimumLength = 6)]
-        public string Password { get; set; } = "";
+        [StringLength(100, MinimumLength = 8)]
+        public string OldPassword { get; set; } = "";
 
         [Required]
-        [Compare("Password")]
-        public string ConfirmPassword { get; set; } = "";
+        [StringLength(100, MinimumLength = 8)]
+        public string NewPassword { get; set; } = "";
     }
 }

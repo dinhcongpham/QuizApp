@@ -11,10 +11,12 @@ namespace QuizApp.QuizApp.API.Controllers
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
+        private readonly IUserRepository _userRepository;
 
-        public AuthController(IAuthService authService)
+        public AuthController(IAuthService authService, IUserRepository userRepository)
         {
             _authService = authService;
+            _userRepository = userRepository;
         }
 
         [HttpPost("register")]
@@ -39,6 +41,28 @@ namespace QuizApp.QuizApp.API.Controllers
         public async Task<IActionResult> Refresh([FromBody] RefreshTokenDto refreshTokenDto)
         {
             var result = await _authService.RefreshTokenAsync(refreshTokenDto);
+            return Ok(result);
+        }
+
+        [HttpPost("update-password")]
+        public async Task<IActionResult> UpdatePassword([FromBody] ChangePasswordDto changePasswordDto)
+        {
+            var result = await _userRepository.ChangePasswordAsync(changePasswordDto);
+            if (!result)
+            {
+                return BadRequest("Failed to update password");
+            }
+            return Ok(result);
+        }
+
+        [HttpPost("update-username")]
+        public async Task<IActionResult> UpdateUsername([FromBody] ChangeUserNameDto changeUserNameDto)
+        {
+            var result = await _userRepository.ChangeUserNameAsync(changeUserNameDto);
+            if (!result)
+            {
+                return BadRequest("Failed to update username");
+            }
             return Ok(result);
         }
     }

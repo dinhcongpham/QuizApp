@@ -79,10 +79,48 @@ namespace QuizApp.QuizApp.Infrastructure.Repositories
             return user;
         }
 
-        public async Task<int> UpdateUser(User user)
+        public async Task<bool> ChangePasswordAsync(ChangePasswordDto changePasswordDto)
+        {
+            if (changePasswordDto == null)
+            {
+                throw new ArgumentNullException(nameof(changePasswordDto));
+            }
+            var user = await GetByIdAsync(changePasswordDto.UserId);
+
+            if (user == null)
+            {
+                throw new ArgumentException("User not found");
+            }
+            if (!_passwordHasher.VerifyHashedPassword(changePasswordDto.OldPassword, user.PasswordHash))
+            {
+                return false;
+            }
+            user.PasswordHash = _passwordHasher.HashPassword(changePasswordDto.NewPassword);
+
+            await UpdateUserAsync(user);
+            return true;
+        }
+
+        public async Task<bool> ChangeUserNameAsync(ChangeUserNameDto changeUserNameDto)
+        {
+            if (changeUserNameDto == null)
+            {
+                throw new ArgumentNullException(nameof(changeUserNameDto));
+            }
+            var user = await GetByIdAsync(changeUserNameDto.UserId);
+            if (user == null)
+            {
+                throw new ArgumentException("User not found");
+            }
+            user.FullName = changeUserNameDto.FullName;
+            await UpdateUserAsync(user);
+            return true;
+        }
+        public async Task<bool> UpdateUserAsync(User user)
         {
             _dbContext.Users.Update(user);
-            return await _dbContext.SaveChangesAsync();
+            await _dbContext.SaveChangesAsync();
+            return true;
         }
 
         public async Task<int> DeleteUser(int userId)
@@ -98,6 +136,5 @@ namespace QuizApp.QuizApp.Infrastructure.Repositories
                 throw new ArgumentException("User not found");
             }
         }
-
     }
 }

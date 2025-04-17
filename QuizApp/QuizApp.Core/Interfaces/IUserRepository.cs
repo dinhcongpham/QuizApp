@@ -10,7 +10,9 @@ namespace QuizApp.QuizApp.Core.Interfaces
         Task<User?> CreateUser(RegisterDto registerDto);
         Task<User?> Authenticate(string email, string password);
         Task<bool> EmailExistsAsync(string email);
-        Task<int> UpdateUser(User user);
+        Task<bool> ChangePasswordAsync(ChangePasswordDto changePasswordDto);
+        Task<bool> ChangeUserNameAsync(ChangeUserNameDto changeUserNameDto);
+        Task<bool> UpdateUserAsync(User user);
         Task<int> DeleteUser(int userId);
     }
 }
