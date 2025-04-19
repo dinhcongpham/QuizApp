@@ -30,7 +30,7 @@ namespace QuizApp.QuizApp.Core.Entities
 
         public User? Owner { get; set; }
 
-        public List<Question> Questions { get; set; } = new();
-        public List<Room> Rooms { get; set; } = new();
+        public ICollection<Question>? Questions { get; set; }
+        public ICollection<Room>? Rooms { get; set; }
     }
 }

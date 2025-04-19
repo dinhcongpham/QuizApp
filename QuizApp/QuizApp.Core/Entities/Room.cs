@@ -30,9 +30,9 @@ namespace QuizApp.QuizApp.Core.Entities
         public DateTime? EndedAt { get; set; }
 
         public Quiz? Quiz { get; set; }
-        public User? Host { get; set; }
-        public List<UserAnswer> UserAnswers { get; set; } = new();
-        public List<LeaderboardSnapshot> LeaderboardSnapshots { get; set; } = new();
-        public List<RoomParticipant> RoomParticipants { get; set; } = new();
+        public User? HostUser { get; set; }
+        public ICollection<UserAnswer>? UserAnswers { get; set; }
+        public ICollection<LeaderboardSnapshot>? LeaderboardSnapshots { get; set; }
+        public ICollection<RoomParticipant>? Participants { get; set; }
     }
 }

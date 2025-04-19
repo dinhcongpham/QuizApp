@@ -63,8 +63,8 @@ namespace QuizApp.QuizApp.Infrastructure.Data
                 .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<Room>()
-                .HasOne(r => r.Host)
-                .WithMany(u => u.Rooms)
+                .HasOne(r => r.HostUser)
+                .WithMany(u => u.HostedRooms)
                 .HasForeignKey(r => r.HostUserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
@@ -125,7 +125,7 @@ namespace QuizApp.QuizApp.Infrastructure.Data
 
             modelBuilder.Entity<RoomParticipant>()
                 .HasOne(rp => rp.Room)
-                .WithMany(r => r.RoomParticipants)
+                .WithMany(r => r.Participants)
                 .HasForeignKey(rp => rp.RoomId)
                 .OnDelete(DeleteBehavior.Cascade);
 

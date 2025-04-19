@@ -32,11 +32,11 @@ namespace QuizApp.QuizApp.Core.Entities
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        public List<RefreshToken> RefreshTokens { get; set; } = new();
-        public List<Quiz> Quizs { get; set; } = new();
-        public List<UserAnswer> UserAnswers { get; set; } = new();
-        public List<LeaderboardSnapshot> LeaderboardSnapshots { get; set; } = new();
-        public List<RoomParticipant> RoomParticipants { get; set; } = new();
-        public List<Room> Rooms { get; set; } = new();
+        public ICollection<RefreshToken>? RefreshTokens { get; set; }
+        public ICollection<Quiz>? Quizs { get; set; }
+        public ICollection<Room>? HostedRooms { get; set; }
+        public ICollection<UserAnswer>? UserAnswers { get; set; }
+        public ICollection<LeaderboardSnapshot>? LeaderboardSnapshots { get; set; }
+        public ICollection<RoomParticipant>? RoomParticipants { get; set; }
     }
 }
