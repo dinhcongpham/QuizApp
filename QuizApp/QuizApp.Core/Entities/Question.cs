@@ -46,5 +46,6 @@ namespace QuizApp.QuizApp.Core.Entities
         // Navigation property for the quiz this question belongs to
 
         public Quiz? Quiz { get; set; }
+        public List<UserAnswer> UserAnswers { get; set; } = new();
     }
 }

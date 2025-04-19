@@ -11,8 +11,12 @@ namespace QuizApp.QuizApp.Core.Entities
         public int Id { get; set; }
 
         [Required]
-        [Column("result_id")]
-        public int ResultId { get; set; }
+        [Column("user_id")]
+        public int UserId { get; set; }
+
+        [Required]
+        [Column("room_id")]
+        public int RoomId { get; set; }
 
         [Required]
         [Column("question_id")]
@@ -20,7 +24,7 @@ namespace QuizApp.QuizApp.Core.Entities
 
         [Required]
         [Column("selected_option")]
-        public string SelectedOption { get; set; } = "";
+        public string SelectedOption { get; set; } = string.Empty;
 
         [Required]
         [Column("is_correct")]
@@ -34,11 +38,8 @@ namespace QuizApp.QuizApp.Core.Entities
         [Column("time_taken_seconds")]
         public decimal TimeTakenSeconds { get; set; }
 
-
-        // Navigation properties
-
-        public UserQuizResult? Result { get; set; }
+        public User? User { get; set; }
+        public Room? Room { get; set; }
         public Question? Question { get; set; }
     }
-
 }
