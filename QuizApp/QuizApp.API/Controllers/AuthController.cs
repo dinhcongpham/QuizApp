@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using QuizApp.QuizApp.Core.Entities;
 using QuizApp.QuizApp.Core.Interfaces;
 using QuizApp.QuizApp.Shared.DTOs;
+using Microsoft.Extensions.Logging;
 
 namespace QuizApp.QuizApp.API.Controllers
 {
@@ -12,58 +13,113 @@ namespace QuizApp.QuizApp.API.Controllers
     {
         private readonly IAuthService _authService;
         private readonly IUserRepository _userRepository;
+        private readonly ILogger<AuthController> _logger;
 
-        public AuthController(IAuthService authService, IUserRepository userRepository)
+        public AuthController(IAuthService authService, IUserRepository userRepository, ILogger<AuthController> logger)
         {
             _authService = authService;
             _userRepository = userRepository;
+            _logger = logger;
         }
 
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterDto registerDto)
         {
-            var result = await _authService.RegisterAsync(registerDto);
-            if (result == null)
+            try
             {
-                return Conflict("User already exists");
+                _logger.LogInformation("Attempting to register user with email: {Email}", registerDto.Email);
+                var result = await _authService.RegisterAsync(registerDto);
+                if (result == null)
+                {
+                    _logger.LogWarning("Registration failed - User already exists with email: {Email}", registerDto.Email);
+                    return Conflict("User already exists");
+                }
+                _logger.LogInformation("User registered successfully with email: {Email}", registerDto.Email);
+                return Ok(result);
             }
-            return Ok(result);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error occurred while registering user with email: {Email}", registerDto.Email);
+                return StatusCode(500, "An error occurred while processing your request");
+            }
         }
 
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
         {
-            var result = await _authService.LoginAsync(loginDto);
-            return Ok(result);
+            try
+            {
+                _logger.LogInformation("Attempting to login user with email: {Email}", loginDto.Email);
+                var result = await _authService.LoginAsync(loginDto);
+                _logger.LogInformation("User logged in successfully with email: {Email}", loginDto.Email);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error occurred while logging in user with email: {Email}", loginDto.Email);
+                return StatusCode(500, "An error occurred while processing your request");
+            }
         }
 
         [HttpPost("refresh-token")]
         public async Task<IActionResult> Refresh([FromBody] RefreshTokenDto refreshTokenDto)
         {
-            var result = await _authService.RefreshTokenAsync(refreshTokenDto);
-            return Ok(result);
+            try
+            {
+                _logger.LogInformation("Attempting to refresh token");
+                var result = await _authService.RefreshTokenAsync(refreshTokenDto);
+                _logger.LogInformation("Token refreshed successfully");
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error occurred while refreshing token");
+                return StatusCode(500, "An error occurred while processing your request");
+            }
         }
 
         [HttpPost("update-password")]
         public async Task<IActionResult> UpdatePassword([FromBody] ChangePasswordDto changePasswordDto)
         {
-            var result = await _userRepository.ChangePasswordAsync(changePasswordDto);
-            if (!result)
+            try
             {
-                return BadRequest("Failed to update password");
+                _logger.LogInformation("Attempting to update password for user: {UserId}", changePasswordDto.UserId);
+                var result = await _userRepository.ChangePasswordAsync(changePasswordDto);
+                if (!result)
+                {
+                    _logger.LogWarning("Failed to update password for user: {UserId}", changePasswordDto.UserId);
+                    return BadRequest("Failed to update password");
+                }
+                _logger.LogInformation("Password updated successfully for user: {UserId}", changePasswordDto.UserId);
+                return Ok(result);
             }
-            return Ok(result);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error occurred while updating password for user: {UserId}", changePasswordDto.UserId);
+                return StatusCode(500, "An error occurred while processing your request");
+            }
         }
 
         [HttpPost("update-username")]
         public async Task<IActionResult> UpdateUsername([FromBody] ChangeUserNameDto changeUserNameDto)
         {
-            var result = await _userRepository.ChangeUserNameAsync(changeUserNameDto);
-            if (!result)
+            try
             {
-                return BadRequest("Failed to update username");
+                _logger.LogInformation("Attempting to update username for user: {UserId}", changeUserNameDto.UserId);
+                var result = await _userRepository.ChangeUserNameAsync(changeUserNameDto);
+                if (!result)
+                {
+                    _logger.LogWarning("Failed to update username for user: {UserId}", changeUserNameDto.UserId);
+                    return BadRequest("Failed to update username");
+                }
+                _logger.LogInformation("Username updated successfully for user: {UserId}", changeUserNameDto.UserId);
+                return Ok(result);
             }
-            return Ok(result);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error occurred while updating username for user: {UserId}", changeUserNameDto.UserId);
+                return StatusCode(500, "An error occurred while processing your request");
+            }
         }
     }
 }

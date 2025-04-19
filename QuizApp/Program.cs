@@ -7,7 +7,8 @@ using System.Text;
 using QuizApp.QuizApp.Core.Interfaces;
 using QuizApp.QuizApp.Infrastructure.Repositories;
 using QuizApp.QuizApp.Infrastructure.Services;
-
+using Microsoft.OpenApi.Models;
+using QuizApp.QuizApp.API.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,7 +33,38 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "QuizApp API", Version = "v1" });
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+
+// Add SignalR
+builder.Services.AddSignalR();
+
+// Add Memory Cache
+builder.Services.AddMemoryCache();
 
 builder.Services.AddAuthentication(options =>
 {
@@ -62,7 +94,7 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IQuizService, QuizService>();
 builder.Services.AddScoped<IQuestionService, QuestionService>();
-
+builder.Services.AddScoped<IGameRoomService, GameRoomService>();
 
 var app = builder.Build();
 
@@ -80,5 +112,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<GameHub>("/gameHub");
 
 app.Run();
