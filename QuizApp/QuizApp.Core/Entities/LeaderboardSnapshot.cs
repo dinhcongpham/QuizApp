@@ -23,10 +23,6 @@ namespace QuizApp.QuizApp.Core.Entities
         public decimal Score { get; set; }
 
         [Required]
-        [Column("question_number")]
-        public int QuestionNumber { get; set; }
-
-        [Required]
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

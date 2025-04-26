@@ -2,12 +2,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using QuizApp.QuizApp.Core.Interfaces;
 using QuizApp.QuizApp.Shared.DTOs;
+using Microsoft.Extensions.Logging;
 
 namespace QuizApp.QuizApp.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
     public class GameController : ControllerBase
     {
         private readonly IGameRoomService _gameRoomService;
@@ -19,126 +19,99 @@ namespace QuizApp.QuizApp.API.Controllers
             _logger = logger;
         }
 
-        [HttpPost("create")]
-        public async Task<IActionResult> CreateRoom([FromBody] CreateRoomDto dto)
+        // GET: api/game/rooms
+        [HttpGet("rooms")]
+        [Authorize]
+        public async Task<ActionResult<List<GameRoomDto>>> GetAllRooms()
         {
             try
             {
+                _logger.LogInformation("Getting all active rooms");
+                var rooms = await _gameRoomService.GetAllActiveRoomsAsync();
+                return Ok(rooms);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting all rooms");
+                return StatusCode(500, "An error occurred while getting rooms");
+            }
+        }
+
+        // GET: api/game/rooms/{roomCode}
+        [HttpGet("rooms/{roomCode}")]
+        [Authorize]
+        public async Task<ActionResult<GameRoomDto>> GetRoom(string roomCode)
+        {
+            try
+            {
+                _logger.LogInformation("Getting room {RoomCode}", roomCode);
+                var room = await _gameRoomService.GetRoomAsync(roomCode);
+                if (room == null)
+                {
+                    _logger.LogWarning("Room {RoomCode} not found", roomCode);
+                    return NotFound();
+                }
+                return Ok(room);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting room {RoomCode}", roomCode);
+                return StatusCode(500, "An error occurred while getting room");
+            }
+        }
+
+        // POST: api/game/rooms
+        [HttpPost("rooms")]
+        [Authorize]
+        public async Task<ActionResult<GameRoomDto>> CreateRoom([FromBody] CreateRoomDto dto)
+        {
+            try
+            {
+                _logger.LogInformation("Creating room for quiz {QuizId} by user {UserId}", dto.QuizId, dto.UserId);
                 var room = await _gameRoomService.CreateRoomAsync(dto.QuizId, dto.UserId);
-                return Ok(room);
+                return CreatedAtAction(nameof(GetRoom), new { roomCode = room.RoomCode }, room);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error creating room");
-                return BadRequest(new { message = ex.Message });
+                _logger.LogError(ex, "Error creating room for quiz {QuizId} by user {UserId}", dto.QuizId, dto.UserId);
+                return StatusCode(500, "An error occurred while creating room");
             }
         }
 
-        [HttpPost("join")]
-        public async Task<IActionResult> JoinRoom([FromBody] JoinRoomDto dto)
+        // DELETE: api/game/rooms/{roomCode}
+        [HttpDelete("rooms/{roomCode}")]
+        [Authorize]
+        public async Task<IActionResult> DeleteRoom(string roomCode)
         {
             try
             {
-                var room = await _gameRoomService.JoinRoomAsync(dto.RoomCode, dto.UserId);
-                return Ok(room);
+                _logger.LogInformation("Deleting room {RoomCode}", roomCode);
+                await _gameRoomService.CleanupRoomAsync(roomCode);
+                return NoContent();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error joining room");
-                return BadRequest(new { message = ex.Message });
+                _logger.LogError(ex, "Error deleting room {RoomCode}", roomCode);
+                return StatusCode(500, "An error occurred while deleting room");
             }
         }
 
-        [HttpPost("start")]
-        public async Task<IActionResult> StartGame([FromBody] StartGameDto dto)
+        // GET: api/game/rooms/{roomCode}/results
+        [HttpGet("rooms/{roomCode}/results")]
+        [Authorize]
+        public async Task<ActionResult<GameResultsDto>> GetRoomResults(string roomCode)
         {
             try
             {
-                var gameState = await _gameRoomService.StartGameAsync(dto.RoomCode);
-                return Ok(gameState);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error starting game");
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-
-        [HttpPost("submit-answer")]
-        public async Task<IActionResult> SubmitAnswer([FromBody] SubmitAnswerDto dto)
-        {
-            try
-            {
-                var result = await _gameRoomService.SubmitAnswerAsync(
-                    dto.RoomCode,
-                    dto.UserId,
-                    dto.QuestionId,
-                    dto.Answer,
-                    dto.TimeTaken
-                );
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error submitting answer");
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-
-        [HttpGet("leaderboard/{roomCode}/{questionId}")]
-        public async Task<IActionResult> GetLeaderboard(string roomCode, int questionId)
-        {
-            try
-            {
-                var leaderboard = await _gameRoomService.GetLeaderboardAsync(roomCode, questionId);
-                return Ok(leaderboard);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting leaderboard");
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-
-        [HttpGet("results/{roomCode}")]
-        public async Task<IActionResult> GetFinalResults(string roomCode)
-        {
-            try
-            {
+                _logger.LogInformation("Getting results for room {RoomCode}", roomCode);
                 var results = await _gameRoomService.GetFinalResultsAsync(roomCode);
                 return Ok(results);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting final results");
-                return BadRequest(new { message = ex.Message });
+                _logger.LogError(ex, "Error getting results for room {RoomCode}", roomCode);
+                return StatusCode(500, "An error occurred while getting results");
             }
         }
-    }
-
-    public class CreateRoomDto
-    {
-        public int QuizId { get; set; }
-        public int UserId { get; set; }
-    }
-
-    public class JoinRoomDto
-    {
-        public string RoomCode { get; set; } = string.Empty;
-        public int UserId { get; set; }
-    }
-
-    public class StartGameDto
-    {
-        public string RoomCode { get; set; } = string.Empty;
-    }
-
-    public class SubmitAnswerDto
-    {
-        public string RoomCode { get; set; } = string.Empty;
-        public int UserId { get; set; }
-        public int QuestionId { get; set; }
-        public string Answer { get; set; } = string.Empty;
-        public decimal TimeTaken { get; set; }
     }
 } 

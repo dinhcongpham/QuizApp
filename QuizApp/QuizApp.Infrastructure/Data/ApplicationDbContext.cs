@@ -10,7 +10,7 @@ namespace QuizApp.QuizApp.Infrastructure.Data
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options){}
         public DbSet<User> Users { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
-        public DbSet<Quiz> Quizzes { get; set; }
+        public DbSet<Quiz> Quizs { get; set; }
         public DbSet<Question> Questions { get; set; }
         public DbSet<Room> Rooms { get; set; }
         public DbSet<RoomParticipant> RoomParticipants { get; set; }

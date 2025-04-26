@@ -21,13 +21,20 @@ namespace QuizApp.QuizApp.Core.Entities
         [Required]
         [Column("room_code")]
         public string RoomCode { get; set; } = string.Empty;
+        [Required]
+        [Column("status")]
+        public string Status { get; set; } = string.Empty;
+
+        [Required]
+        [Column("created_at")]
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         [Required]
         [Column("started_at")]
         public DateTime StartedAt { get; set; } = DateTime.UtcNow;
 
         [Column("ended_at")]
-        public DateTime? EndedAt { get; set; }
+        public DateTime? EndedAt { get; set; } = DateTime.UtcNow;
 
         public Quiz? Quiz { get; set; }
         public User? HostUser { get; set; }

@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using QuizApp.QuizApp.Core.Entities;
 using QuizApp.QuizApp.Core.Interfaces;
 using QuizApp.QuizApp.Infrastructure.Data;

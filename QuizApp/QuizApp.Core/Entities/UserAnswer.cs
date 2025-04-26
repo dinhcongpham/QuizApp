@@ -31,12 +31,12 @@ namespace QuizApp.QuizApp.Core.Entities
         public bool IsCorrect { get; set; }
 
         [Required]
-        [Column("answered_at")]
-        public DateTime AnsweredAt { get; set; } = DateTime.UtcNow;
-
-        [Required]
         [Column("time_taken_seconds")]
         public decimal TimeTakenSeconds { get; set; }
+        
+        [Required]
+        [Column("score")]
+        public int Score { get; set; }
 
         public User? User { get; set; }
         public Room? Room { get; set; }

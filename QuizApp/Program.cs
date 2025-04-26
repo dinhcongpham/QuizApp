@@ -9,6 +9,7 @@ using QuizApp.QuizApp.Infrastructure.Repositories;
 using QuizApp.QuizApp.Infrastructure.Services;
 using Microsoft.OpenApi.Models;
 using QuizApp.QuizApp.API.Hubs;
+using QuizApp.QuizApp.Core.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +21,7 @@ builder.Services.AddCors(options =>
             .WithOrigins("http://localhost:5173")
             .AllowAnyHeader()
             .AllowAnyMethod()
+            .AllowCredentials()
     );
 });
 

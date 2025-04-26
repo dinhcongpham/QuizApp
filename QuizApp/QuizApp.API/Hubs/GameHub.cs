@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using QuizApp.QuizApp.Core.Entities;
 using QuizApp.QuizApp.Core.Interfaces;
 using QuizApp.QuizApp.Shared.DTOs;
@@ -27,8 +28,37 @@ namespace QuizApp.QuizApp.API.Hubs
 
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
-            _logger.LogInformation($"Client disconnected: {Context.ConnectionId}");
-            await base.OnDisconnectedAsync(exception);
+            try
+            {
+                // Get all rooms the user is in
+                var userRooms = await _gameRoomService.GetUserRoomsAsync(Context.ConnectionId);
+                
+                foreach (var roomCode in userRooms)
+                {
+                    // Remove user from room
+                    await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomCode);
+                    
+                    // Check if room is empty and cleanup if needed
+                    var room = await _gameRoomService.GetRoomAsync(roomCode);
+                    if (room != null && room.Participants.Count == 0)
+                    {
+                        await _gameRoomService.CleanupRoomAsync(roomCode);
+                        _logger.LogInformation($"Room {roomCode} cleaned up after all users disconnected");
+                    }
+                    else
+                    {
+                        await Clients.Group(roomCode).SendAsync("UserLeft", Context.ConnectionId);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error handling disconnection for client {Context.ConnectionId}");
+            }
+            finally
+            {
+                await base.OnDisconnectedAsync(exception);
+            }
         }
 
         public async Task CreateRoom(int quizId, int userId)
@@ -70,9 +100,6 @@ namespace QuizApp.QuizApp.API.Hubs
                 var gameState = await _gameRoomService.StartGameAsync(roomCode);
                 await Clients.Group(roomCode).SendAsync("GameStarted", gameState);
                 _logger.LogInformation($"Game started in room {roomCode}");
-
-                // Start timer for first question
-                await StartQuestionTimer(roomCode, gameState.CurrentQuestionIndex);
             }
             catch (Exception ex)
             {
@@ -85,8 +112,7 @@ namespace QuizApp.QuizApp.API.Hubs
         {
             try
             {
-                var result = await _gameRoomService.SubmitAnswerAsync(roomCode, userId, questionId, answer, timeTaken);
-                await Clients.Group(roomCode).SendAsync("AnswerSubmitted", result);
+                await _gameRoomService.SubmitAnswerAsync(roomCode, userId, questionId, answer, timeTaken);
                 _logger.LogInformation($"Answer submitted by user {userId} in room {roomCode}");
             }
             catch (Exception ex)
@@ -96,36 +122,36 @@ namespace QuizApp.QuizApp.API.Hubs
             }
         }
 
-        private async Task StartQuestionTimer(string roomCode, int questionIndex)
+        public async Task EndQuestionTimer(string roomCode, int questionIndex)
         {
-            // Wait for 20 seconds
-            await Task.Delay(20000);
-
             try
             {
+                _logger.LogInformation($"Host ended timer for question {questionIndex} in room {roomCode}");
+
+                // Get and send current leaderboard
                 var leaderboard = await _gameRoomService.GetLeaderboardAsync(roomCode, questionIndex);
                 await Clients.Group(roomCode).SendAsync("QuestionEnded", leaderboard);
-                _logger.LogInformation($"Question {questionIndex} ended in room {roomCode}");
 
-                // Check if game should continue
-                var gameState = _cache.Get<GameState>($"gamestate_{roomCode}");
+                // Check and update game state
+                var gameState = await _gameRoomService.GetGameStateAsync(roomCode);
                 if (gameState != null && gameState.CurrentQuestionIndex < gameState.TotalQuestions - 1)
                 {
                     gameState.CurrentQuestionIndex++;
-                    _cache.Set($"gamestate_{roomCode}", gameState);
+                    await _gameRoomService.UpdateGameStateAsync(roomCode, gameState);
                     await Clients.Group(roomCode).SendAsync("NextQuestion", gameState);
-                    await StartQuestionTimer(roomCode, gameState.CurrentQuestionIndex);
                 }
                 else
                 {
-                    var finalResults = await _gameRoomService.GetFinalResultsAsync(roomCode);
+                    var finalResults = await _gameRoomService.GetGameStateAsync(roomCode);
+                    await _gameRoomService.SaveRoomDataToDatabaseAsync(roomCode);
+                    await _gameRoomService.CleanupRoomAsync(roomCode);
                     await Clients.Group(roomCode).SendAsync("GameEnded", finalResults);
                     _logger.LogInformation($"Game ended in room {roomCode}");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error in question timer for room {roomCode}");
+                _logger.LogError(ex, $"Error handling question end in room {roomCode}");
                 await Clients.Group(roomCode).SendAsync("Error", "Game error occurred");
             }
         }

@@ -7,12 +7,13 @@ namespace QuizApp.QuizApp.Shared.DTOs
         public string RoomCode { get; set; } = string.Empty;
         public int QuizId { get; set; }
         public int HostUserId { get; set; }
-        public List<QuestionDto> Questions { get; set; } = new();
+        public List<QuestionResponseDto> Questions { get; set; } = new();
         public List<RoomParticipantDto> Participants { get; set; } = new();
         public string Status { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
+        public DateTime StartedAt { get; set; }
     }
-
+    
     public class GameStateDto
     {
         public string RoomCode { get; set; } = string.Empty;
@@ -22,54 +23,36 @@ namespace QuizApp.QuizApp.Shared.DTOs
         public string Status { get; set; } = string.Empty;
     }
 
-    public class AnswerResultDto
+    public class UserAnswerEntryDto
     {
-        public int UserId { get; set; }
-        public int QuestionId { get; set; }
-        public bool IsCorrect { get; set; }
-        public decimal Score { get; set; }
+        public int UserId { get; set; } = 0;
+        public int RoomId { get; set; } = 0;
+        public int QuestionId { get; set; } = 0;
+        public string SelectedOption { get; set; } = string.Empty;
+        public bool IsCorrect { get; set; } = false;
+        public int Score { get; set; } = 0;
+        public decimal TimeTaken { get; set; } = 0;
     }
 
-    public class LeaderboardEntryDto
+    public class UserAnswersDto
     {
-        public int UserId { get; set; }
-        public string UserName { get; set; } = string.Empty;
-        public decimal Score { get; set; }
-        public decimal TimeTaken { get; set; }
+        public int RoomId { get; set; } = 0;
+        public List<UserAnswerEntryDto> UserAnswers { get; set; } = new();
+    }
+
+    public class LeaderboardSnapshotEntryDto
+    {
+        public int RoomId { get; set; } = 0;
+        public int QuizId { get; set; } = 0;
+        public int UserId { get; set; } = 0;
+        public int Score { get; set; } = 0;
+
     }
 
     public class LeaderboardSnapshotDto
     {
-        public int RoomId { get; set; }
-        public int QuestionId { get; set; }
-        public List<LeaderboardEntryDto> Entries { get; set; } = new();
-        public DateTime CreatedAt { get; set; }
-    }
-
-    public class GameResultsDto
-    {
-        public int RoomId { get; set; }
-        public List<LeaderboardEntryDto> FinalLeaderboard { get; set; } = new();
-        public List<QuestionResultDto> QuestionResults { get; set; } = new();
-        public DateTime CreatedAt { get; set; }
-    }
-
-    public class QuestionResultDto
-    {
-        public int QuestionId { get; set; }
-        public string Content { get; set; } = string.Empty;
-        public string CorrectOption { get; set; } = string.Empty;
-        public List<UserAnswerDto> UserAnswers { get; set; } = new();
-    }
-
-    public class UserAnswerDto
-    {
-        public int UserId { get; set; }
-        public string UserName { get; set; } = string.Empty;
-        public string SelectedOption { get; set; } = string.Empty;
-        public bool IsCorrect { get; set; }
-        public decimal TimeTaken { get; set; }
-        public decimal Score { get; set; }
+        public int RoomId { get; set; } = 0;
+        public List<LeaderboardSnapshotEntryDto> Entries { get; set; } = new();
     }
 
     public class RoomParticipantDto
@@ -78,4 +61,4 @@ namespace QuizApp.QuizApp.Shared.DTOs
         public string UserName { get; set; } = string.Empty;
         public DateTime JoinedAt { get; set; }
     }
-} 
+}

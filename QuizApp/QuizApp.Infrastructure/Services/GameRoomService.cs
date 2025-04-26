@@ -1,11 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using QuizApp.QuizApp.Core.Entities;
 using QuizApp.QuizApp.Core.Interfaces;
 using QuizApp.QuizApp.Infrastructure.Data;
 using QuizApp.QuizApp.Shared.DTOs;
 
-namespace QuizApp.QuizApp.Infrastructure.Services
+namespace QuizApp.QuizApp.Core.Services
 {
     public class GameRoomService : IGameRoomService
     {
@@ -13,311 +14,342 @@ namespace QuizApp.QuizApp.Infrastructure.Services
         private readonly IQuizService _quizService;
         private readonly IQuestionService _questionService;
         private readonly IUserRepository _userRepository;
-        private readonly ApplicationDbContext _context;
+        private readonly ApplicationDbContext _dbContext;
         private readonly ILogger<GameRoomService> _logger;
+        private const string ROOM_PREFIX = "ROOM_";
+        private const string GAME_STATE_PREFIX = "GAME_";
+        private const string USER_ROOMS_PREFIX = "USER_";
 
         public GameRoomService(
-            IMemoryCache cache,
-            IQuizService quizService,
-            IQuestionService questionService,
-            IUserRepository userRepository,
-            ApplicationDbContext context,
-            ILogger<GameRoomService> logger)
+            IMemoryCache cache, 
+            IQuizService quizService, 
+            IQuestionService questionService, 
+            IUserRepository userRepository, 
+            ILogger<GameRoomService> logger,
+            ApplicationDbContext dbContext
+        )
         {
             _cache = cache;
             _quizService = quizService;
             _questionService = questionService;
             _userRepository = userRepository;
-            _context = context;
             _logger = logger;
+            _dbContext = dbContext;
         }
 
         public async Task<GameRoomDto> CreateRoomAsync(int quizId, int userId)
         {
-            var quiz = await _quizService.GetByIdAsync(quizId);
-            if (quiz == null) throw new Exception("Quiz not found");
-
-            var questions = await _questionService.GetByQuizIdAsync(quizId);
-            var user = await _userRepository.GetByIdAsync(userId);
-            if (user == null) throw new Exception("User not found");
-
-            var roomCode = GenerateRoomCode();
-            var room = new Room
+            try
             {
-                QuizId = quizId,
-                HostUserId = userId,
-                RoomCode = roomCode,
-                Status = "Waiting",
-                CreatedAt = DateTime.UtcNow
-            };
-
-            // Lưu vào cache
-            var gameRoom = new GameRoomDto
-            {
-                RoomCode = roomCode,
-                QuizId = quizId,
-                HostUserId = userId,
-                Questions = questions.Select(q => new QuestionDto
+                _logger.LogInformation("Creating room for quiz {QuizId} by user {UserId}", quizId, userId);
+                
+                // Check if user already has a room
+                var existingRoom = await GetRoomAsync(userId.ToString());
+                if (existingRoom != null)
                 {
-                    QuestionId = q.QuestionId,
-                    Content = q.Content,
-                    OptionA = q.OptionA,
-                    OptionB = q.OptionB,
-                    OptionC = q.OptionC,
-                    OptionD = q.OptionD,
-                    CorrectOption = q.CorrectOption
-                }).ToList(),
-                Status = "Waiting",
-                CreatedAt = DateTime.UtcNow
-            };
+                    throw new InvalidOperationException($"User {userId} already has a room: {existingRoom.RoomCode}");
+                }
 
-            _cache.Set($"room_{roomCode}", gameRoom, TimeSpan.FromHours(1));
+                // Get quiz details
+                var quiz = await _quizService.GetByIdAsync(quizId);
+                if (quiz == null)
+                {
+                    throw new ArgumentException($"Quiz with ID {quizId} not found");
+                }
+                
+                var roomCode = GenerateRoomCode();
 
-            // Lưu vào database
-            await _context.Rooms.AddAsync(room);
-            await _context.SaveChangesAsync();
+                // Create room with user ID as room code
+                var room = new GameRoomDto
+                {
+                    RoomCode = roomCode,
+                    QuizId = quizId,
+                    HostUserId = userId,
+                    Questions = (await _questionService.GetByQuizIdAsync(quizId)).Select(q => new QuestionResponseDto
+                    {
+                        QuestionId = q.QuestionId,
+                        QuizId = q.QuizId,
+                        Content = q.Content,
+                        OptionA = q.OptionA,
+                        OptionB = q.OptionB,
+                        OptionC = q.OptionC,
+                        OptionD = q.OptionD,
+                        CorrectOption = q.CorrectOption,
+                        CreatedAt = q.CreatedAt
+                    }).ToList(),
+                    Participants = new []
+                    {
+                        new RoomParticipantDto
+                        {
+                            UserId = userId,
+                            UserName = (await _userRepository.GetByIdAsync(userId))?.FullName ?? "Host",
+                            JoinedAt = DateTime.UtcNow
+                        }
+                    }.ToList(),
+                    Status = "WAITING", 
+                    CreatedAt = DateTime.UtcNow,
+                    StartedAt = DateTime.MinValue
+                };
 
-            return gameRoom;
+                // Store room in cache
+                _cache.Set($"{ROOM_PREFIX}{roomCode}", room);
+
+                // Add to active rooms list
+                var activeRooms = _cache.Get<List<string>>("ACTIVE_ROOMS") ?? new List<string>();
+                activeRooms.Add(roomCode);
+                _cache.Set("ACTIVE_ROOMS", activeRooms, TimeSpan.FromHours(1));
+
+                _logger.LogInformation("Room {RoomCode} created successfully", userId);
+                return room;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating room for quiz {QuizId} by user {UserId}", quizId, userId);
+                throw;
+            }
         }
 
         public async Task<GameRoomDto> JoinRoomAsync(string roomCode, int userId)
         {
-            var room = _cache.Get<GameRoomDto>($"room_{roomCode}");
-            if (room == null) throw new Exception("Room not found");
-
-            var user = await _userRepository.GetByIdAsync(userId);
-            if (user == null) throw new Exception("User not found");
-
-            // Check if user is already in the room
-            if (room.Participants.Any(p => p.UserId == userId))
-                throw new Exception("User already in room");
-
-            // Add participant to cache
-            var participant = new RoomParticipantDto
+            try
             {
-                UserId = userId,
-                UserName = user.FullName,
-                JoinedAt = DateTime.UtcNow
-            };
-
-            room.Participants.Add(participant);
-            _cache.Set($"room_{roomCode}", room, TimeSpan.FromHours(1));
-
-            // Add participant to database
-            var roomEntity = await _context.Rooms.FirstOrDefaultAsync(r => r.RoomCode == roomCode);
-            if (roomEntity != null)
-            {
-                var roomParticipant = new RoomParticipant
+                _logger.LogInformation("User {UserId} attempting to join room {RoomCode}", userId, roomCode);
+                
+                var room = await GetRoomAsync(roomCode);
+                if (room == null)
                 {
-                    UserId = userId,
-                    RoomId = roomEntity.Id,
-                    JoinedAt = DateTime.UtcNow
-                };
+                    throw new ArgumentException($"Room {roomCode} not found");
+                }
 
-                await _context.RoomParticipants.AddAsync(roomParticipant);
-                await _context.SaveChangesAsync();
+                if (room.Status != "WAITING")
+                {
+                    throw new InvalidOperationException("Cannot join a room that has already started");
+                }
+
+                // Add user to participants if not already there
+                if (!room.Participants.Any(p => p.UserId == userId))
+                {
+                    room.Participants.Add(new RoomParticipantDto
+                    {
+                        UserId = userId,
+                        JoinedAt = DateTime.UtcNow
+                    });
+
+                    // Update room in cache
+                    _cache.Set($"{ROOM_PREFIX}{roomCode}", room);
+                }
+
+                _logger.LogInformation("User {UserId} joined room {RoomCode} successfully", userId, roomCode);
+                return room;
             }
-
-            return room;
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error joining room {RoomCode} by user {UserId}", roomCode, userId);
+                throw;
+            }
         }
 
         public async Task<GameStateDto> StartGameAsync(string roomCode)
         {
-            var room = _cache.Get<GameRoomDto>($"room_{roomCode}");
-            if (room == null) throw new Exception("Room not found");
-
-            var gameState = new GameStateDto
+            try
             {
-                RoomCode = roomCode,
-                CurrentQuestionIndex = 0,
-                TotalQuestions = room.Questions.Count,
-                StartTime = DateTime.UtcNow,
-                Status = "InProgress"
-            };
-
-            // Update room status in cache
-            room.Status = "InProgress";
-            _cache.Set($"room_{roomCode}", room, TimeSpan.FromHours(1));
-
-            // Update room status in database
-            var roomEntity = await _context.Rooms.FirstOrDefaultAsync(r => r.RoomCode == roomCode);
-            if (roomEntity != null)
-            {
-                roomEntity.Status = "InProgress";
-                roomEntity.StartedAt = DateTime.UtcNow;
-                await _context.SaveChangesAsync();
-            }
-
-            // Store game state in cache
-            _cache.Set($"gamestate_{roomCode}", gameState, TimeSpan.FromHours(1));
-
-            return gameState;
-        }
-
-        public async Task<AnswerResultDto> SubmitAnswerAsync(string roomCode, int userId, int questionId, string answer, decimal timeTaken)
-        {
-            var room = _cache.Get<GameRoomDto>($"room_{roomCode}");
-            if (room == null) throw new Exception("Room not found");
-
-            var question = room.Questions.FirstOrDefault(q => q.QuestionId == questionId);
-            if (question == null) throw new Exception("Question not found");
-
-            var isCorrect = answer == question.CorrectOption;
-            var score = CalculateScore(isCorrect, timeTaken);
-
-            // Store answer in cache
-            var userAnswer = new UserAnswerDto
-            {
-                UserId = userId,
-                UserName = (await _userRepository.GetByIdAsync(userId))?.FullName ?? "Unknown",
-                SelectedOption = answer,
-                IsCorrect = isCorrect,
-                TimeTaken = timeTaken,
-                Score = score
-            };
-
-            var answers = _cache.Get<List<UserAnswerDto>>($"answers_{roomCode}_{questionId}") ?? new List<UserAnswerDto>();
-            answers.Add(userAnswer);
-            _cache.Set($"answers_{roomCode}_{questionId}", answers, TimeSpan.FromHours(1));
-
-            // Store answer in database
-            var roomEntity = await _context.Rooms.FirstOrDefaultAsync(r => r.RoomCode == roomCode);
-            if (roomEntity != null)
-            {
-                var answerEntity = new UserAnswer
+                _logger.LogInformation("Starting game in room {RoomCode}", roomCode);
+                
+                var room = await GetRoomAsync(roomCode);
+                if (room == null)
                 {
-                    UserId = userId,
-                    RoomId = roomEntity.Id,
-                    QuestionId = questionId,
-                    SelectedOption = answer,
-                    IsCorrect = isCorrect,
-                    TimeTakenSeconds = timeTaken,
-                    AnsweredAt = DateTime.UtcNow
+                    throw new ArgumentException($"Room {roomCode} not found");
+                }
+
+                if (room.Status != "WAITING")
+                {
+                    throw new InvalidOperationException("Game has already started");
+                }
+
+                // Create game state
+                var gameState = new GameStateDto
+                {
+                    RoomCode = roomCode,
+                    CurrentQuestionIndex = 0,
+                    TotalQuestions = room.Questions.Count,
+                    StartTime = DateTime.UtcNow,
+                    Status = "IN_PROGRESS"
                 };
 
-                await _context.UserAnswers.AddAsync(answerEntity);
-                await _context.SaveChangesAsync();
-            }
+                // Update room status
+                room.Status = "IN_PROGRESS";
+                room.StartedAt = DateTime.UtcNow;
+                _cache.Set($"{ROOM_PREFIX}{roomCode}", room);
 
-            return new AnswerResultDto
+                // Store game state
+                _cache.Set($"{GAME_STATE_PREFIX}{roomCode}", gameState);
+
+                _logger.LogInformation("Game started in room {RoomCode}", roomCode);
+                return gameState;
+            }
+            catch (Exception ex)
             {
-                UserId = userId,
-                QuestionId = questionId,
-                IsCorrect = isCorrect,
-                Score = score
-            };
+                _logger.LogError(ex, "Error starting game in room {RoomCode}", roomCode);
+                throw;
+            }
+        }
+
+        public async Task SubmitAnswerAsync(string roomCode, int userId, int questionId, string answer, decimal timeTaken)
+        {
+            try
+            {
+                _logger.LogInformation("User {UserId} submitting answer for question {QuestionId} in room {RoomCode}", 
+                    userId, questionId, roomCode);
+
+                var gameState = await GetGameStateAsync(roomCode);
+                if (gameState == null)
+                {
+                    throw new ArgumentException($"Game not found for room {roomCode}");
+                }
+
+                var room = await GetRoomAsync(roomCode);
+                if (room == null)
+                {
+                    throw new ArgumentException($"Room {roomCode} not found");
+                }
+
+                var question = room.Questions.FirstOrDefault(q => q.QuestionId == questionId);
+                if (question == null)
+                {
+                    throw new ArgumentException($"Question {questionId} not found in room {roomCode}");
+                }
+
+                // Calculate score based on correctness and time taken
+                var isCorrect = answer == question.CorrectOption;
+                var score = isCorrect ? CalculateScore(timeTaken) : 0;
+
+                // Update leaderboard
+                await UpdateLeaderboardAsync(roomCode, questionId, userId, score, timeTaken);
+
+                _logger.LogInformation("Answer submitted successfully by user {UserId} in room {RoomCode}", 
+                    userId, roomCode);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error submitting answer in room {RoomCode} by user {UserId}", 
+                    roomCode, userId);
+                throw;
+            }
         }
 
         public async Task<LeaderboardSnapshotDto> GetLeaderboardAsync(string roomCode, int questionId)
         {
-            var room = _cache.Get<GameRoomDto>($"room_{roomCode}");
-            if (room == null) throw new Exception("Room not found");
-
-            var answers = _cache.Get<List<UserAnswerDto>>($"answers_{roomCode}_{questionId}") ?? new List<UserAnswerDto>();
-            var leaderboard = answers
-                .GroupBy(a => a.UserId)
-                .Select(g => new LeaderboardEntryDto
-                {
-                    UserId = g.Key,
-                    UserName = g.First().UserName,
-                    Score = g.Sum(a => a.Score),
-                    TimeTaken = g.Average(a => a.TimeTaken)
-                })
-                .OrderByDescending(e => e.Score)
-                .ThenBy(e => e.TimeTaken)
-                .ToList();
-
-            var snapshot = new LeaderboardSnapshotDto
+            try
             {
-                RoomId = (await _context.Rooms.FirstOrDefaultAsync(r => r.RoomCode == roomCode))?.Id ?? 0,
-                QuestionId = questionId,
-                Entries = leaderboard,
-                CreatedAt = DateTime.UtcNow
-            };
+                _logger.LogInformation("Getting leaderboard for question {QuestionId} in room {RoomCode}", 
+                    questionId, roomCode);
 
-            // Store in cache
-            _cache.Set($"leaderboard_{roomCode}_{questionId}", snapshot, TimeSpan.FromHours(1));
-
-            // Store in database
-            var roomEntity = await _context.Rooms.FirstOrDefaultAsync(r => r.RoomCode == roomCode);
-            if (roomEntity != null)
-            {
-                var leaderboardEntity = new LeaderboardSnapshot
+                var leaderboard = await Task.FromResult(_cache.Get<LeaderboardSnapshotDto>($"LEADERBOARD_{roomCode}_{questionId}"));
+                if (leaderboard == null)
                 {
-                    RoomId = roomEntity.Id,
-                    QuestionId = questionId,
-                    Score = leaderboard.FirstOrDefault()?.Score ?? 0,
-                    QuestionNumber = questionId,
-                    CreatedAt = DateTime.UtcNow
-                };
+                    throw new ArgumentException($"Leaderboard not found for question {questionId} in room {roomCode}");
+                }
 
-                await _context.LeaderboardSnapshots.AddAsync(leaderboardEntity);
-                await _context.SaveChangesAsync();
+                return leaderboard;
             }
-
-            return snapshot;
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting leaderboard for question {QuestionId} in room {RoomCode}", 
+                    questionId, roomCode);
+                throw;
+            }
         }
 
-        public async Task<GameResultsDto> GetFinalResultsAsync(string roomCode)
+        public async Task<IEnumerable<string>> GetUserRoomsAsync(string connectionId)
         {
-            var room = _cache.Get<GameRoomDto>($"room_{roomCode}");
-            if (room == null) throw new Exception("Room not found");
-
-            var finalResults = new GameResultsDto
+            try
             {
-                RoomId = (await _context.Rooms.FirstOrDefaultAsync(r => r.RoomCode == roomCode))?.Id ?? 0,
-                FinalLeaderboard = new List<LeaderboardEntryDto>(),
-                QuestionResults = new List<QuestionResultDto>(),
-                CreatedAt = DateTime.UtcNow
-            };
-
-            // Calculate final leaderboard
-            var allAnswers = new List<UserAnswerDto>();
-            foreach (var question in room.Questions)
-            {
-                var answers = _cache.Get<List<UserAnswerDto>>($"answers_{roomCode}_{question.QuestionId}") ?? new List<UserAnswerDto>();
-                allAnswers.AddRange(answers);
+                _logger.LogInformation("Getting rooms for user {ConnectionId}", connectionId);
+                var rooms = await Task.FromResult(_cache.Get<List<string>>($"{USER_ROOMS_PREFIX}{connectionId}") ?? new List<string>());
+                return rooms;
             }
-
-            finalResults.FinalLeaderboard = allAnswers
-                .GroupBy(a => a.UserId)
-                .Select(g => new LeaderboardEntryDto
-                {
-                    UserId = g.Key,
-                    UserName = g.First().UserName,
-                    Score = g.Sum(a => a.Score),
-                    TimeTaken = g.Average(a => a.TimeTaken)
-                })
-                .OrderByDescending(e => e.Score)
-                .ThenBy(e => e.TimeTaken)
-                .ToList();
-
-            // Get detailed results for each question
-            foreach (var question in room.Questions)
+            catch (Exception ex)
             {
-                var answers = _cache.Get<List<UserAnswerDto>>($"answers_{roomCode}_{question.QuestionId}") ?? new List<UserAnswerDto>();
-                finalResults.QuestionResults.Add(new QuestionResultDto
-                {
-                    QuestionId = question.QuestionId,
-                    Content = question.Content,
-                    CorrectOption = question.CorrectOption,
-                    UserAnswers = answers
-                });
+                _logger.LogError(ex, "Error getting rooms for user {ConnectionId}", connectionId);
+                throw;
             }
+        }
 
-            // Update room status
-            room.Status = "Ended";
-            _cache.Set($"room_{roomCode}", room, TimeSpan.FromHours(1));
-
-            var roomEntity = await _context.Rooms.FirstOrDefaultAsync(r => r.RoomCode == roomCode);
-            if (roomEntity != null)
+        public async Task<GameStateDto?> GetGameStateAsync(string roomCode)
+        {
+            try
             {
-                roomEntity.Status = "Ended";
-                roomEntity.EndedAt = DateTime.UtcNow;
-                await _context.SaveChangesAsync();
+                _logger.LogInformation("Getting game state for room {RoomCode}", roomCode);
+                var gameState = await Task.FromResult(_cache.Get<GameStateDto>($"{GAME_STATE_PREFIX}{roomCode}"));
+                return gameState;
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting game state for room {RoomCode}", roomCode);
+                throw;
+            }
+        }
 
-            return finalResults;
+        public async Task UpdateGameStateAsync(string roomCode, GameStateDto gameState)
+        {
+            try
+            {
+                _logger.LogInformation("Updating game state for room {RoomCode}", roomCode);
+                await Task.Run(() => _cache.Set($"{GAME_STATE_PREFIX}{roomCode}", gameState));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating game state for room {RoomCode}", roomCode);
+                throw;
+            }
+        }
+
+
+        public async Task CleanupRoomAsync(string roomCode)
+        {
+            try
+            {
+                _logger.LogInformation("Cleaning up room {RoomCode}", roomCode);
+                
+                // Remove room data
+                await Task.Run(() => _cache.Remove($"{ROOM_PREFIX}{roomCode}"));
+                
+                // Remove game state
+                await Task.Run(() => _cache.Remove($"{GAME_STATE_PREFIX}{roomCode}"));
+                
+                // Remove user answers
+                await Task.Run(() => _cache.Remove($"USER_ANSWERS_{roomCode}"));
+                
+                // Remove leaderboard
+                await Task.Run(() => _cache.Remove($"LEADERBOARD_{roomCode}"));
+
+                // Remove from active rooms list
+                var activeRooms = await Task.FromResult(_cache.Get<List<string>>("ACTIVE_ROOMS") ?? new List<string>());
+                activeRooms.Remove(roomCode);
+                await Task.Run(() => _cache.Set("ACTIVE_ROOMS", activeRooms, TimeSpan.FromHours(1)));
+
+                _logger.LogInformation("Room {RoomCode} cleaned up successfully", roomCode);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error cleaning up room {RoomCode}", roomCode);
+                throw;
+            }
+        }
+
+        public async Task<GameRoomDto?> GetRoomAsync(string roomCode)
+        {
+            try
+            {
+                _logger.LogInformation("Getting room {RoomCode}", roomCode);
+                var room = await Task.FromResult(_cache.Get<GameRoomDto>($"{ROOM_PREFIX}{roomCode}"));
+                return room;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting room {RoomCode}", roomCode);
+                throw;
+            }
         }
 
         private string GenerateRoomCode()
@@ -328,10 +360,184 @@ namespace QuizApp.QuizApp.Infrastructure.Services
                 .Select(s => s[random.Next(s.Length)]).ToArray());
         }
 
-        private decimal CalculateScore(bool isCorrect, decimal timeTaken)
+        private int CalculateScore(decimal timeTaken)
         {
-            if (!isCorrect) return 0;
-            return Math.Max(0, 1000 - (timeTaken * 10));
+            // Base score is 10000, reduced by time taken
+            const decimal maxTime = 20000;
+            const decimal baseScore = 10000;
+            
+            if (timeTaken >= maxTime) 
+                return 0;
+
+            var score = baseScore * (1 - (timeTaken / maxTime));
+            return (int)Math.Round(score);
+        }
+
+        private async Task UpdateLeaderboardAsync(string roomCode, int questionId, int userId, int score, decimal timeTaken)
+        {
+            // Get or create user answers
+            var userAnswers = await Task.FromResult(_cache.Get<UserAnswersDto>($"USER_ANSWERS_{roomCode}"))
+                ?? new UserAnswersDto
+                {
+                    RoomId = int.Parse(roomCode),
+                    UserAnswers = new List<UserAnswerEntryDto>()
+                };
+
+            // Add or update user's answer
+            var existingAnswer = userAnswers.UserAnswers.FirstOrDefault(a => a.UserId == userId && a.QuestionId == questionId);
+            if (existingAnswer != null)
+            {
+                existingAnswer.Score = score;
+                existingAnswer.TimeTaken = timeTaken;
+                existingAnswer.IsCorrect = score > 0;
+            }
+            else
+            {
+                userAnswers.UserAnswers.Add(new UserAnswerEntryDto
+                {
+                    UserId = userId,
+                    QuestionId = questionId,
+                    Score = score,
+                    TimeTaken = timeTaken,
+                    IsCorrect = score > 0
+                });
+            }
+
+            // Save user answers
+            _cache.Set($"USER_ANSWERS_{roomCode}", userAnswers);
+
+            // Get or create leaderboard
+            var leaderboard = await Task.FromResult(_cache.Get<LeaderboardSnapshotDto>($"LEADERBOARD_{roomCode}"))
+                ?? new LeaderboardSnapshotDto
+                {
+                    RoomId = int.Parse(roomCode),
+                    Entries = new List<LeaderboardSnapshotEntryDto>()
+                };
+
+            // Update or add user's score in leaderboard
+            var existingEntry = leaderboard.Entries.FirstOrDefault(e => e.UserId == userId);
+            if (existingEntry != null)
+            {
+                existingEntry.Score += (int)score;
+            }
+            else
+            {
+                leaderboard.Entries.Add(new LeaderboardSnapshotEntryDto
+                {
+                    UserId = userId,
+                    Score = (int)score
+                });
+            }
+
+            // Sort entries by score (descending)
+            leaderboard.Entries = leaderboard.Entries
+                .OrderByDescending(e => e.Score)
+                .ToList();
+
+            // Save leaderboard
+            _cache.Set($"LEADERBOARD_{roomCode}", leaderboard);
+        }
+
+        public async Task SaveRoomDataToDatabaseAsync(string roomCode)
+        {
+            try
+            {
+                _logger.LogInformation("Saving room {RoomCode} data to database", roomCode);
+
+                // Get room data from cache
+                var room = await GetRoomAsync(roomCode);
+                if (room == null)
+                {
+                    throw new ArgumentException($"Room {roomCode} not found");
+                }
+
+                // Get user answers from cache
+                var userAnswers = await Task.FromResult(_cache.Get<UserAnswersDto>($"USER_ANSWERS_{roomCode}"));
+                if (userAnswers == null)
+                {
+                    throw new ArgumentException($"User answers for room {roomCode} not found");
+                }
+
+                // Get leaderboard from cache
+                var leaderboard = await Task.FromResult(_cache.Get<LeaderboardSnapshotDto>($"LEADERBOARD_{roomCode}"));
+                if (leaderboard == null)
+                {
+                    throw new ArgumentException($"Leaderboard for room {roomCode} not found");
+                }
+
+                // Save room data
+                var roomEntity = new Room
+                {
+                    RoomCode = room.RoomCode,
+                    QuizId = room.QuizId,
+                    HostUserId = room.HostUserId,
+                    Status = room.Status,
+                    CreatedAt = room.CreatedAt,
+                    StartedAt = room.StartedAt
+                };
+                await _dbContext.Rooms.AddAsync(roomEntity);
+                await _dbContext.SaveChangesAsync();
+
+                // Save room participants
+                foreach (var participant in room.Participants)
+                {
+                    var participantEntity = new RoomParticipant
+                    {
+                        RoomId = roomEntity.Id,
+                        UserId = participant.UserId,
+                        JoinedAt = participant.JoinedAt
+                    };
+                    await _dbContext.RoomParticipants.AddAsync(participantEntity);
+                }
+                await _dbContext.SaveChangesAsync();
+
+                // Save user answers
+                foreach (var answer in userAnswers.UserAnswers)
+                {
+                    var answerEntity = new UserAnswer
+                    {
+                        RoomId = roomEntity.Id,
+                        UserId = answer.UserId,
+                        QuestionId = answer.QuestionId,
+                        Score = answer.Score,
+                        TimeTakenSeconds = answer.TimeTaken,
+                        IsCorrect = answer.IsCorrect,
+                        SelectedOption = answer.SelectedOption
+                    };
+                    await _dbContext.UserAnswers.AddAsync(answerEntity);
+                }
+                await _dbContext.SaveChangesAsync();
+
+                // Save leaderboard snapshot
+                var leaderboardEntity = new LeaderboardSnapshot
+                {
+                    RoomId = roomEntity.Id,
+                    CreatedAt = DateTime.UtcNow
+                };
+                await _dbContext.LeaderboardSnapshots.AddAsync(leaderboardEntity);
+                await _dbContext.SaveChangesAsync();
+
+                // Save leaderboard entries
+                foreach (var entry in leaderboard.Entries)
+                {
+                    var entryEntity = new LeaderboardSnapshot
+                    {
+                        UserId = entry.UserId,
+                        RoomId = roomEntity.Id,
+                        Score = entry.Score,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    await _dbContext.LeaderboardSnapshots.AddAsync(entryEntity);
+                }
+                await _dbContext.SaveChangesAsync();
+
+                _logger.LogInformation("Room {RoomCode} data saved to database successfully", roomCode);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error saving room {RoomCode} data to database", roomCode);
+                throw;
+            }
         }
     }
 } 
