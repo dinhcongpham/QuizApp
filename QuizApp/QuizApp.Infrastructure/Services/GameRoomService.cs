@@ -59,7 +59,20 @@ namespace QuizApp.QuizApp.Core.Services
                 
                 var roomCode = GenerateRoomCode();
 
-                // Create room with user ID as room code
+                // Create room entity in database
+                var roomEntity = new Room
+                {
+                    RoomCode = roomCode,
+                    QuizId = quizId,
+                    HostUserId = userId,
+                    Status = "WAITING",
+                    CreatedAt = DateTime.UtcNow,
+                    StartedAt = DateTime.MinValue
+                };
+                await _dbContext.Rooms.AddAsync(roomEntity);
+                await _dbContext.SaveChangesAsync();
+
+                // Create room DTO for cache
                 var room = new GameRoomDto
                 {
                     RoomCode = roomCode,
@@ -99,7 +112,7 @@ namespace QuizApp.QuizApp.Core.Services
                 activeRooms.Add(roomCode);
                 _cache.Set("ACTIVE_ROOMS", activeRooms, TimeSpan.FromHours(1));
 
-                _logger.LogInformation("Room {RoomCode} created successfully", userId);
+                _logger.LogInformation("Room {RoomCode} created successfully", roomCode);
                 return room;
             }
             catch (Exception ex)
@@ -406,11 +419,13 @@ namespace QuizApp.QuizApp.Core.Services
             // Save user answers
             _cache.Set($"USER_ANSWERS_{roomCode}", userAnswers);
 
+            var room = await _dbContext.Rooms.FirstOrDefaultAsync(r => r.RoomCode == roomCode);
+
             // Get or create leaderboard
             var leaderboard = await Task.FromResult(_cache.Get<LeaderboardSnapshotDto>($"LEADERBOARD_{roomCode}"))
                 ?? new LeaderboardSnapshotDto
                 {
-                    RoomId = int.Parse(roomCode),
+                    RoomId = room?.Id ?? 0,
                     Entries = new List<LeaderboardSnapshotEntryDto>()
                 };
 
@@ -465,25 +480,26 @@ namespace QuizApp.QuizApp.Core.Services
                     throw new ArgumentException($"Leaderboard for room {roomCode} not found");
                 }
 
-                // Save room data
-                var roomEntity = new Room
+                var roomEntity = await _dbContext.Rooms
+                    .FirstOrDefaultAsync(r => r.RoomCode == roomCode);
+
+                if (roomEntity != null)
                 {
-                    RoomCode = room.RoomCode,
-                    QuizId = room.QuizId,
-                    HostUserId = room.HostUserId,
-                    Status = room.Status,
-                    CreatedAt = room.CreatedAt,
-                    StartedAt = room.StartedAt
-                };
-                await _dbContext.Rooms.AddAsync(roomEntity);
-                await _dbContext.SaveChangesAsync();
+                    roomEntity.Status = room.Status;
+                    roomEntity.StartedAt = room.StartedAt;
+
+                    await _dbContext.SaveChangesAsync();
+                }
+
+                // Now we have roomId, save related entities
+                var roomId = roomEntity?.Id ?? 0;
 
                 // Save room participants
                 foreach (var participant in room.Participants)
                 {
                     var participantEntity = new RoomParticipant
                     {
-                        RoomId = roomEntity.Id,
+                        RoomId = roomId,
                         UserId = participant.UserId,
                         JoinedAt = participant.JoinedAt
                     };
@@ -496,7 +512,7 @@ namespace QuizApp.QuizApp.Core.Services
                 {
                     var answerEntity = new UserAnswer
                     {
-                        RoomId = roomEntity.Id,
+                        RoomId = roomId,
                         UserId = answer.UserId,
                         QuestionId = answer.QuestionId,
                         Score = answer.Score,
@@ -511,7 +527,7 @@ namespace QuizApp.QuizApp.Core.Services
                 // Save leaderboard snapshot
                 var leaderboardEntity = new LeaderboardSnapshot
                 {
-                    RoomId = roomEntity.Id,
+                    RoomId = roomId,
                     CreatedAt = DateTime.UtcNow
                 };
                 await _dbContext.LeaderboardSnapshots.AddAsync(leaderboardEntity);
@@ -523,7 +539,7 @@ namespace QuizApp.QuizApp.Core.Services
                     var entryEntity = new LeaderboardSnapshot
                     {
                         UserId = entry.UserId,
-                        RoomId = roomEntity.Id,
+                        RoomId = roomId,
                         Score = entry.Score,
                         CreatedAt = DateTime.UtcNow
                     };
