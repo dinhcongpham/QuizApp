@@ -97,7 +97,7 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IQuizService, QuizService>();
 builder.Services.AddScoped<IQuestionService, QuestionService>();
 builder.Services.AddScoped<IGameRoomService, GameRoomService>();
-
+builder.Services.AddScoped<IQuestionTimerService, QuestionTimerService>();
 var app = builder.Build();
 
 app.UseCors("AllowFrontend");

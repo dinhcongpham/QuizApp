@@ -1,10 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
 using QuizApp.QuizApp.Core.Entities;
 using QuizApp.QuizApp.Core.Interfaces;
 using QuizApp.QuizApp.Infrastructure.Data;
 using QuizApp.QuizApp.Shared.DTOs;
+using Microsoft.AspNetCore.SignalR;
+using QuizApp.QuizApp.API.Hubs;
 
 namespace QuizApp.QuizApp.Core.Services
 {
@@ -16,6 +17,8 @@ namespace QuizApp.QuizApp.Core.Services
         private readonly IUserRepository _userRepository;
         private readonly ApplicationDbContext _dbContext;
         private readonly ILogger<GameRoomService> _logger;
+        private readonly IQuestionTimerService _timerService;
+        private readonly IHubContext<GameHub> _hubContext;
         private const string ROOM_PREFIX = "ROOM_";
         private const string GAME_STATE_PREFIX = "GAME_";
         private const string USER_ROOMS_PREFIX = "USER_";
@@ -26,7 +29,9 @@ namespace QuizApp.QuizApp.Core.Services
             IQuestionService questionService, 
             IUserRepository userRepository, 
             ILogger<GameRoomService> logger,
-            ApplicationDbContext dbContext
+            ApplicationDbContext dbContext,
+            IQuestionTimerService timerService,
+            IHubContext<GameHub> hubContext
         )
         {
             _cache = cache;
@@ -35,6 +40,15 @@ namespace QuizApp.QuizApp.Core.Services
             _userRepository = userRepository;
             _logger = logger;
             _dbContext = dbContext;
+            _timerService = timerService;
+            _hubContext = hubContext;
+        }
+
+        public enum RoomStatus
+        {
+            Waiting,
+            InProgress,
+            Completed
         }
 
         public async Task<GameRoomDto> CreateRoomAsync(int quizId, int userId)
@@ -65,9 +79,9 @@ namespace QuizApp.QuizApp.Core.Services
                     RoomCode = roomCode,
                     QuizId = quizId,
                     HostUserId = userId,
-                    Status = "WAITING",
+                    Status = RoomStatus.Waiting.ToString(),
                     CreatedAt = DateTime.UtcNow,
-                    StartedAt = DateTime.MinValue
+                    StartedAt = DateTime.UtcNow
                 };
                 await _dbContext.Rooms.AddAsync(roomEntity);
                 await _dbContext.SaveChangesAsync();
@@ -99,7 +113,7 @@ namespace QuizApp.QuizApp.Core.Services
                             JoinedAt = DateTime.UtcNow
                         }
                     }.ToList(),
-                    Status = "WAITING", 
+                    Status = RoomStatus.Waiting.ToString(),
                     CreatedAt = DateTime.UtcNow,
                     StartedAt = DateTime.MinValue
                 };
@@ -134,7 +148,7 @@ namespace QuizApp.QuizApp.Core.Services
                     throw new ArgumentException($"Room {roomCode} not found");
                 }
 
-                if (room.Status != "WAITING")
+                if (room.Status != RoomStatus.Waiting.ToString())
                 {
                     throw new InvalidOperationException("Cannot join a room that has already started");
                 }
@@ -142,10 +156,12 @@ namespace QuizApp.QuizApp.Core.Services
                 // Add user to participants if not already there
                 if (!room.Participants.Any(p => p.UserId == userId))
                 {
+                    var username = (await _userRepository.GetByIdAsync(userId))?.FullName ?? "Player";
                     room.Participants.Add(new RoomParticipantDto
                     {
                         UserId = userId,
-                        JoinedAt = DateTime.UtcNow
+                        JoinedAt = DateTime.UtcNow,
+                        UserName = username
                     });
 
                     // Update room in cache
@@ -174,7 +190,7 @@ namespace QuizApp.QuizApp.Core.Services
                     throw new ArgumentException($"Room {roomCode} not found");
                 }
 
-                if (room.Status != "WAITING")
+                if (room.Status != RoomStatus.Waiting.ToString())
                 {
                     throw new InvalidOperationException("Game has already started");
                 }
@@ -186,16 +202,29 @@ namespace QuizApp.QuizApp.Core.Services
                     CurrentQuestionIndex = 0,
                     TotalQuestions = room.Questions.Count,
                     StartTime = DateTime.UtcNow,
-                    Status = "IN_PROGRESS"
+                    Status = RoomStatus.InProgress.ToString()
                 };
 
                 // Update room status
-                room.Status = "IN_PROGRESS";
+                room.Status = RoomStatus.InProgress.ToString();
                 room.StartedAt = DateTime.UtcNow;
                 _cache.Set($"{ROOM_PREFIX}{roomCode}", room);
 
                 // Store game state
                 _cache.Set($"{GAME_STATE_PREFIX}{roomCode}", gameState);
+
+                // Start timer for first question
+                _timerService.StartTimer(roomCode, gameState.CurrentQuestionIndex, (rc, qi) =>
+                {
+                    try
+                    {
+                        _ = OnQuestionTimeout(rc, qi);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Unhandled error in timer callback for room {RoomCode}, question {QuestionIndex}", rc, qi);
+                    }
+                });
 
                 _logger.LogInformation("Game started in room {RoomCode}", roomCode);
                 return gameState;
@@ -204,6 +233,69 @@ namespace QuizApp.QuizApp.Core.Services
             {
                 _logger.LogError(ex, "Error starting game in room {RoomCode}", roomCode);
                 throw;
+            }
+        }
+
+        private async Task OnQuestionTimeout(string roomCode, int questionIndex)
+        {
+            try
+            {
+                _logger.LogInformation("Question timeout for room {RoomCode}, question {QuestionIndex}", roomCode, questionIndex);
+
+                var gameState = await GetGameStateAsync(roomCode);
+                if (gameState == null)
+                {
+                    throw new ArgumentException($"Game not found for room {roomCode}");
+                }
+
+                if (gameState.CurrentQuestionIndex != questionIndex)
+                {
+                    return; // Timer is no longer relevant
+                }
+
+                // Get current leaderboard
+                var leaderboard = await GetLeaderboardAsync(roomCode, gameState.CurrentQuestionIndex);
+
+                // Notify all clients about the end of the question and send leaderboard
+                await _hubContext.Clients.Group(roomCode).SendAsync("QuestionEnded", new
+                {
+                    QuestionIndex = questionIndex,
+                    Leaderboard = leaderboard,
+                });
+
+                // Check if this is the last question
+                if (gameState.CurrentQuestionIndex >= gameState.TotalQuestions - 1)
+                {
+                    // End game
+                    await SaveRoomDataToDatabaseAsync(roomCode);
+                    await CleanupRoomAsync(roomCode);
+                    
+                    // Notify all clients that the game has ended
+                    await _hubContext.Clients.Group(roomCode).SendAsync("GameEnded", new
+                    {
+                        FinalLeaderboard = leaderboard
+                    });
+                    return;
+                }
+
+                // Move to next question
+                gameState.CurrentQuestionIndex++;
+                await UpdateGameStateAsync(roomCode, gameState);
+
+                // Start timer for next question
+                _timerService.StartTimer(roomCode, gameState.CurrentQuestionIndex, async (rc, qi) => await OnQuestionTimeout(rc, qi));
+
+                // Notify all clients about the next question
+                await _hubContext.Clients.Group(roomCode).SendAsync("NextQuestion", new
+                {
+                    GameState = gameState
+                });
+
+                _logger.LogInformation("Question timeout handled for room {RoomCode}, question {QuestionIndex}", roomCode, questionIndex);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error handling question timeout for room {RoomCode}, question {QuestionIndex}", roomCode, questionIndex);
             }
         }
 
@@ -317,13 +409,19 @@ namespace QuizApp.QuizApp.Core.Services
             }
         }
 
-
         public async Task CleanupRoomAsync(string roomCode)
         {
             try
             {
                 _logger.LogInformation("Cleaning up room {RoomCode}", roomCode);
                 
+                // Stop all timers
+                var gameState = await GetGameStateAsync(roomCode);
+                if (gameState != null)
+                {
+                    _timerService.StopAllTimers(roomCode, gameState.CurrentQuestionIndex);
+                }
+
                 // Remove room data
                 await Task.Run(() => _cache.Remove($"{ROOM_PREFIX}{roomCode}"));
                 
@@ -388,11 +486,12 @@ namespace QuizApp.QuizApp.Core.Services
 
         private async Task UpdateLeaderboardAsync(string roomCode, int questionId, int userId, int score, decimal timeTaken)
         {
+            var room = await _dbContext.Rooms.FirstOrDefaultAsync(r => r.RoomCode == roomCode);
             // Get or create user answers
             var userAnswers = await Task.FromResult(_cache.Get<UserAnswersDto>($"USER_ANSWERS_{roomCode}"))
                 ?? new UserAnswersDto
                 {
-                    RoomId = int.Parse(roomCode),
+                    RoomId = room?.Id ?? 0,
                     UserAnswers = new List<UserAnswerEntryDto>()
                 };
 
@@ -418,8 +517,6 @@ namespace QuizApp.QuizApp.Core.Services
 
             // Save user answers
             _cache.Set($"USER_ANSWERS_{roomCode}", userAnswers);
-
-            var room = await _dbContext.Rooms.FirstOrDefaultAsync(r => r.RoomCode == roomCode);
 
             // Get or create leaderboard
             var leaderboard = await Task.FromResult(_cache.Get<LeaderboardSnapshotDto>($"LEADERBOARD_{roomCode}"))

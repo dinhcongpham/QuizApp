@@ -19,23 +19,6 @@ namespace QuizApp.QuizApp.API.Controllers
             _logger = logger;
         }
 
-        // GET: api/game/rooms
-        [HttpGet("rooms")]
-        [Authorize]
-        public async Task<ActionResult<List<GameRoomDto>>> GetAllRooms()
-        {
-            try
-            {
-                _logger.LogInformation("Getting all active rooms");
-                var rooms = await _gameRoomService.GetAllActiveRoomsAsync();
-                return Ok(rooms);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting all rooms");
-                return StatusCode(500, "An error occurred while getting rooms");
-            }
-        }
 
         // GET: api/game/rooms/{roomCode}
         [HttpGet("rooms/{roomCode}")]
@@ -96,22 +79,5 @@ namespace QuizApp.QuizApp.API.Controllers
             }
         }
 
-        // GET: api/game/rooms/{roomCode}/results
-        [HttpGet("rooms/{roomCode}/results")]
-        [Authorize]
-        public async Task<ActionResult<GameResultsDto>> GetRoomResults(string roomCode)
-        {
-            try
-            {
-                _logger.LogInformation("Getting results for room {RoomCode}", roomCode);
-                var results = await _gameRoomService.GetFinalResultsAsync(roomCode);
-                return Ok(results);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting results for room {RoomCode}", roomCode);
-                return StatusCode(500, "An error occurred while getting results");
-            }
-        }
     }
 } 
