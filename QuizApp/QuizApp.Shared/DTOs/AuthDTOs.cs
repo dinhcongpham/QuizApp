@@ -42,7 +42,7 @@ namespace QuizApp.QuizApp.Shared.DTOs
         public string RefreshToken { get; set; } = "";
     }
 
-    public class ForgotPasswordDto
+    public class ForgotPasswordRequestDTO
     {
         [Required]
         [EmailAddress]

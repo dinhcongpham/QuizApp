@@ -31,9 +31,9 @@ namespace QuizApp.QuizApp.Core.Entities
         public bool IsCorrect { get; set; }
 
         [Required]
-        [Column("time_taken_seconds")]
+        [Column("time_taken_seconds", TypeName = "decimal(10,3)")]
         public decimal TimeTakenSeconds { get; set; }
-        
+
         [Required]
         [Column("score")]
         public int Score { get; set; }

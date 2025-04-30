@@ -4,6 +4,7 @@ using QuizApp.QuizApp.Core.Entities;
 using QuizApp.QuizApp.Core.Interfaces;
 using QuizApp.QuizApp.Shared.DTOs;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Authorization;
 
 namespace QuizApp.QuizApp.API.Controllers
 {
@@ -79,6 +80,7 @@ namespace QuizApp.QuizApp.API.Controllers
         }
 
         [HttpPost("update-password")]
+        [Authorize]
         public async Task<IActionResult> UpdatePassword([FromBody] ChangePasswordDto changePasswordDto)
         {
             try
@@ -101,6 +103,7 @@ namespace QuizApp.QuizApp.API.Controllers
         }
 
         [HttpPost("update-username")]
+        [Authorize]
         public async Task<IActionResult> UpdateUsername([FromBody] ChangeUserNameDto changeUserNameDto)
         {
             try
@@ -118,6 +121,29 @@ namespace QuizApp.QuizApp.API.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error occurred while updating username for user: {UserId}", changeUserNameDto.UserId);
+                return StatusCode(500, "An error occurred while processing your request");
+            }
+        }
+
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequestDTO request)
+        {
+            try
+            {
+                _logger.LogInformation("Attempting to send password reset email to: {Email}", request.Email);
+                var can = await _authService.ForgotPasswordAsync(request);
+                if (can == false)
+                {
+                    _logger.LogWarning("No user found with email: {Email}", request.Email);
+                    return NotFound("User not found");
+                }
+                // Logic to send password reset email goes here
+                _logger.LogInformation("Password reset email sent to: {Email}", request.Email);
+                return Ok("Password reset email sent");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error occurred while sending password reset email to: {Email}", request.Email);
                 return StatusCode(500, "An error occurred while processing your request");
             }
         }

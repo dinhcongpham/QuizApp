@@ -6,6 +6,7 @@ using QuizApp.QuizApp.Infrastructure.Data;
 using QuizApp.QuizApp.Shared.DTOs;
 using Microsoft.AspNetCore.SignalR;
 using QuizApp.QuizApp.API.Hubs;
+using System.Text.Json;
 
 namespace QuizApp.QuizApp.Core.Services
 {
@@ -15,33 +16,32 @@ namespace QuizApp.QuizApp.Core.Services
         private readonly IQuizService _quizService;
         private readonly IQuestionService _questionService;
         private readonly IUserRepository _userRepository;
-        private readonly ApplicationDbContext _dbContext;
         private readonly ILogger<GameRoomService> _logger;
         private readonly IQuestionTimerService _timerService;
         private readonly IHubContext<GameHub> _hubContext;
+        private readonly IServiceScopeFactory _scopeFactory;
         private const string ROOM_PREFIX = "ROOM_";
         private const string GAME_STATE_PREFIX = "GAME_";
         private const string USER_ROOMS_PREFIX = "USER_";
 
         public GameRoomService(
             IMemoryCache cache, 
-            IQuizService quizService, 
-            IQuestionService questionService, 
-            IUserRepository userRepository, 
+            IQuizService quizService,
+            IQuestionService questionService,
+            IUserRepository userRepository,
             ILogger<GameRoomService> logger,
-            ApplicationDbContext dbContext,
             IQuestionTimerService timerService,
-            IHubContext<GameHub> hubContext
-        )
+            IHubContext<GameHub> hubContext,
+            IServiceScopeFactory scopeFactory)
         {
             _cache = cache;
             _quizService = quizService;
             _questionService = questionService;
             _userRepository = userRepository;
             _logger = logger;
-            _dbContext = dbContext;
             _timerService = timerService;
             _hubContext = hubContext;
+            _scopeFactory = scopeFactory;
         }
 
         public enum RoomStatus
@@ -55,6 +55,8 @@ namespace QuizApp.QuizApp.Core.Services
         {
             try
             {
+                using var scope = _scopeFactory.CreateScope();
+                var _dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                 _logger.LogInformation("Creating room for quiz {QuizId} by user {UserId}", quizId, userId);
                 
                 // Check if user already has a room
@@ -257,24 +259,22 @@ namespace QuizApp.QuizApp.Core.Services
                 var leaderboard = await GetLeaderboardAsync(roomCode, gameState.CurrentQuestionIndex);
 
                 // Notify all clients about the end of the question and send leaderboard
-                await _hubContext.Clients.Group(roomCode).SendAsync("QuestionEnded", new
-                {
-                    QuestionIndex = questionIndex,
-                    Leaderboard = leaderboard,
-                });
+                await _hubContext.Clients.Group(roomCode).SendAsync("QuestionEnded",
+                    leaderboard
+                );
 
                 // Check if this is the last question
                 if (gameState.CurrentQuestionIndex >= gameState.TotalQuestions - 1)
                 {
+                    var userAnswers = _cache.Get<UserAnswersDto>($"USER_ANSWERS_{roomCode}");
+                    // Notify all clients that the game has ended
+                    await _hubContext.Clients.Group(roomCode).SendAsync("GameEnded",
+                        userAnswers
+                    );
+
                     // End game
                     await SaveRoomDataToDatabaseAsync(roomCode);
                     await CleanupRoomAsync(roomCode);
-                    
-                    // Notify all clients that the game has ended
-                    await _hubContext.Clients.Group(roomCode).SendAsync("GameEnded", new
-                    {
-                        FinalLeaderboard = leaderboard
-                    });
                     return;
                 }
 
@@ -282,14 +282,15 @@ namespace QuizApp.QuizApp.Core.Services
                 gameState.CurrentQuestionIndex++;
                 await UpdateGameStateAsync(roomCode, gameState);
 
+                // Notify all clients about the next question
+                await _hubContext.Clients.Group(roomCode).SendAsync("GameStateUpdated",
+                    gameState
+                );
+
                 // Start timer for next question
                 _timerService.StartTimer(roomCode, gameState.CurrentQuestionIndex, async (rc, qi) => await OnQuestionTimeout(rc, qi));
 
-                // Notify all clients about the next question
-                await _hubContext.Clients.Group(roomCode).SendAsync("NextQuestion", new
-                {
-                    GameState = gameState
-                });
+
 
                 _logger.LogInformation("Question timeout handled for room {RoomCode}, question {QuestionIndex}", roomCode, questionIndex);
             }
@@ -329,7 +330,7 @@ namespace QuizApp.QuizApp.Core.Services
                 var score = isCorrect ? CalculateScore(timeTaken) : 0;
 
                 // Update leaderboard
-                await UpdateLeaderboardAsync(roomCode, questionId, userId, score, timeTaken);
+                await UpdateLeaderboardAsync(roomCode, questionId, userId, answer, score, timeTaken);
 
                 _logger.LogInformation("Answer submitted successfully by user {UserId} in room {RoomCode}", 
                     userId, roomCode);
@@ -349,7 +350,7 @@ namespace QuizApp.QuizApp.Core.Services
                 _logger.LogInformation("Getting leaderboard for question {QuestionId} in room {RoomCode}", 
                     questionId, roomCode);
 
-                var leaderboard = await Task.FromResult(_cache.Get<LeaderboardSnapshotDto>($"LEADERBOARD_{roomCode}_{questionId}"));
+                var leaderboard = await Task.FromResult(_cache.Get<LeaderboardSnapshotDto>($"LEADERBOARD_{roomCode}"));
                 if (leaderboard == null)
                 {
                     throw new ArgumentException($"Leaderboard not found for question {questionId} in room {roomCode}");
@@ -474,7 +475,7 @@ namespace QuizApp.QuizApp.Core.Services
         private int CalculateScore(decimal timeTaken)
         {
             // Base score is 10000, reduced by time taken
-            const decimal maxTime = 20000;
+            const decimal maxTime = 15000;
             const decimal baseScore = 10000;
             
             if (timeTaken >= maxTime) 
@@ -484,11 +485,15 @@ namespace QuizApp.QuizApp.Core.Services
             return (int)Math.Round(score);
         }
 
-        private async Task UpdateLeaderboardAsync(string roomCode, int questionId, int userId, int score, decimal timeTaken)
+        private async Task UpdateLeaderboardAsync(string roomCode, int questionId, int userId, string answer, int score, decimal timeTaken)
         {
+            using var scope = _scopeFactory.CreateScope();
+            var _dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var room = await _dbContext.Rooms.FirstOrDefaultAsync(r => r.RoomCode == roomCode);
+
+
             // Get or create user answers
-            var userAnswers = await Task.FromResult(_cache.Get<UserAnswersDto>($"USER_ANSWERS_{roomCode}"))
+            var userAnswers = _cache.Get<UserAnswersDto>($"USER_ANSWERS_{roomCode}")
                 ?? new UserAnswersDto
                 {
                     RoomId = room?.Id ?? 0,
@@ -509,6 +514,7 @@ namespace QuizApp.QuizApp.Core.Services
                 {
                     UserId = userId,
                     QuestionId = questionId,
+                    SelectedOption = answer,
                     Score = score,
                     TimeTaken = timeTaken,
                     IsCorrect = score > 0
@@ -519,7 +525,7 @@ namespace QuizApp.QuizApp.Core.Services
             _cache.Set($"USER_ANSWERS_{roomCode}", userAnswers);
 
             // Get or create leaderboard
-            var leaderboard = await Task.FromResult(_cache.Get<LeaderboardSnapshotDto>($"LEADERBOARD_{roomCode}"))
+            var leaderboard = _cache.Get<LeaderboardSnapshotDto>($"LEADERBOARD_{roomCode}")
                 ?? new LeaderboardSnapshotDto
                 {
                     RoomId = room?.Id ?? 0,
@@ -552,19 +558,26 @@ namespace QuizApp.QuizApp.Core.Services
 
         public async Task SaveRoomDataToDatabaseAsync(string roomCode)
         {
+            using var scope = _scopeFactory.CreateScope();
+            var _dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             try
             {
                 _logger.LogInformation("Saving room {RoomCode} data to database", roomCode);
 
                 // Get room data from cache
                 var room = await GetRoomAsync(roomCode);
+
                 if (room == null)
                 {
                     throw new ArgumentException($"Room {roomCode} not found");
+                } else
+                {
+                    room.Status = RoomStatus.Completed.ToString();
+                    await _dbContext.SaveChangesAsync();
                 }
 
-                // Get user answers from cache
-                var userAnswers = await Task.FromResult(_cache.Get<UserAnswersDto>($"USER_ANSWERS_{roomCode}"));
+                    // Get user answers from cache
+                    var userAnswers = await Task.FromResult(_cache.Get<UserAnswersDto>($"USER_ANSWERS_{roomCode}"));
                 if (userAnswers == null)
                 {
                     throw new ArgumentException($"User answers for room {roomCode} not found");
@@ -619,15 +632,6 @@ namespace QuizApp.QuizApp.Core.Services
                     };
                     await _dbContext.UserAnswers.AddAsync(answerEntity);
                 }
-                await _dbContext.SaveChangesAsync();
-
-                // Save leaderboard snapshot
-                var leaderboardEntity = new LeaderboardSnapshot
-                {
-                    RoomId = roomId,
-                    CreatedAt = DateTime.UtcNow
-                };
-                await _dbContext.LeaderboardSnapshots.AddAsync(leaderboardEntity);
                 await _dbContext.SaveChangesAsync();
 
                 // Save leaderboard entries

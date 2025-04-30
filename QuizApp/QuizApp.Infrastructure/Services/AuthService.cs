@@ -19,19 +19,22 @@ namespace QuizApp.QuizApp.Infrastructure.Services
         private readonly IPasswordHasher _passwordHasher;
         private readonly ITokenService _tokenService;
         private readonly IRefreshTokenRepository _refreshTokenRepository;
+        private readonly IEmailService _emailService;
 
         public AuthService(
             IUserRepository userRepository,
             IConfiguration configuration,
             IPasswordHasher passwordHasher,
             ITokenService tokenService,
-            IRefreshTokenRepository refreshTokenRepository)
+            IRefreshTokenRepository refreshTokenRepository,
+            IEmailService emailService)
         {
             _userRepository = userRepository;
             _configuration = configuration;
             _passwordHasher = passwordHasher;
             _tokenService = tokenService;
             _refreshTokenRepository = refreshTokenRepository;
+            _emailService = emailService;
         }
 
         public async Task<AuthResponseDto> RegisterAsync(RegisterDto registerDto)
@@ -85,6 +88,22 @@ namespace QuizApp.QuizApp.Infrastructure.Services
             var tokenResponse = await _tokenService.GenerateTokens(refreshToken.UserId);
 
             return tokenResponse;
+        }
+
+        public async Task<bool> ForgotPasswordAsync(ForgotPasswordRequestDTO forgotPasswordRequestDTO)
+        {
+            var user = await _userRepository.GetByEmailAsync(forgotPasswordRequestDTO.Email);
+            if (user == null)
+                return false;
+            // Generate a password reset token
+            var newPassword = _passwordHasher.GenerateRandomPassword(15);
+
+            await _emailService.SendAsync(forgotPasswordRequestDTO.Email, "Your New Password",
+                $"Your new password is: <b>{newPassword}</b>");
+
+            user.PasswordHash = _passwordHasher.HashPassword(newPassword);
+            await _userRepository.UpdateUserAsync(user);
+            return true;
         }
     }
 }

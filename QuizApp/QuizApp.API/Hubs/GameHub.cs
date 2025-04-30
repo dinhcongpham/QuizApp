@@ -122,38 +122,38 @@ namespace QuizApp.QuizApp.API.Hubs
             }
         }
 
-        public async Task EndQuestionTimer(string roomCode, int questionIndex)
-        {
-            try
-            {
-                _logger.LogInformation($"Host ended timer for question {questionIndex} in room {roomCode}");
+        //public async Task EndQuestionTimer(string roomCode, int questionIndex)
+        //{
+        //    try
+        //    {
+        //        _logger.LogInformation($"Host ended timer for question {questionIndex} in room {roomCode}");
 
-                // Get and send current leaderboard
-                var leaderboard = await _gameRoomService.GetLeaderboardAsync(roomCode, questionIndex);
-                await Clients.Group(roomCode).SendAsync("QuestionEnded", leaderboard);
+        //        // Get and send current leaderboard
+        //        var leaderboard = await _gameRoomService.GetLeaderboardAsync(roomCode, questionIndex);
+        //        await Clients.Group(roomCode).SendAsync("QuestionEnded", leaderboard);
 
-                // Check and update game state
-                var gameState = await _gameRoomService.GetGameStateAsync(roomCode);
-                if (gameState != null && gameState.CurrentQuestionIndex < gameState.TotalQuestions - 1)
-                {
-                    gameState.CurrentQuestionIndex++;
-                    await _gameRoomService.UpdateGameStateAsync(roomCode, gameState);
-                    await Clients.Group(roomCode).SendAsync("NextQuestion", gameState);
-                }
-                else
-                {
-                    var finalResults = await _gameRoomService.GetGameStateAsync(roomCode);
-                    await _gameRoomService.SaveRoomDataToDatabaseAsync(roomCode);
-                    await _gameRoomService.CleanupRoomAsync(roomCode);
-                    await Clients.Group(roomCode).SendAsync("GameEnded", finalResults);
-                    _logger.LogInformation($"Game ended in room {roomCode}");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error handling question end in room {roomCode}");
-                await Clients.Group(roomCode).SendAsync("Error", "Game error occurred");
-            }
-        }
+        //        // Check and update game state
+        //        var gameState = await _gameRoomService.GetGameStateAsync(roomCode);
+        //        if (gameState != null && gameState.CurrentQuestionIndex < gameState.TotalQuestions - 1)
+        //        {
+        //            gameState.CurrentQuestionIndex++;
+        //            await _gameRoomService.UpdateGameStateAsync(roomCode, gameState);
+        //            await Clients.Group(roomCode).SendAsync("NextQuestion", gameState);
+        //        }
+        //        else
+        //        {
+        //            var finalResults = await _gameRoomService.GetGameStateAsync(roomCode);
+        //            await _gameRoomService.SaveRoomDataToDatabaseAsync(roomCode);
+        //            await _gameRoomService.CleanupRoomAsync(roomCode);
+        //            await Clients.Group(roomCode).SendAsync("GameEnded", finalResults);
+        //            _logger.LogInformation($"Game ended in room {roomCode}");
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        _logger.LogError(ex, $"Error handling question end in room {roomCode}");
+        //        await Clients.Group(roomCode).SendAsync("Error", "Game error occurred");
+        //    }
+        //}
     }
 } 
