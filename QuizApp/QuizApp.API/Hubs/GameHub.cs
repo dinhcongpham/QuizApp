@@ -81,10 +81,28 @@ namespace QuizApp.QuizApp.API.Hubs
         {
             try
             {
-                var room = await _gameRoomService.JoinRoomAsync(roomCode, userId);
-                await Groups.AddToGroupAsync(Context.ConnectionId, roomCode);
-                await Clients.Group(roomCode).SendAsync("UserJoined", room);
-                _logger.LogInformation($"User {userId} joined room {roomCode}");
+                var room = await _gameRoomService.GetRoomAsync(roomCode);
+                if (room.Status == "InProgress")
+                {
+                    var (roomInfo, gameState, leaderboard) = await _gameRoomService.JoinRoomWhenProgressAsync(roomCode, userId);
+                    await Clients.Group(roomCode).SendAsync("NotifyUserJoined", roomInfo, leaderboard);
+
+                    await Groups.AddToGroupAsync(Context.ConnectionId, roomCode);
+                    await Clients.Client(Context.ConnectionId).SendAsync("UserJoinedWhenGameProgress",
+                        roomInfo,
+                        gameState,
+                        leaderboard
+                    );
+                    _logger.LogInformation($"User {userId} joined room {roomCode} in Progress state");
+                }
+
+                if (room.Status == "Waiting")
+                {
+                    var roomInfo = await _gameRoomService.JoinRoomAsync(roomCode, userId);
+                    await Groups.AddToGroupAsync(Context.ConnectionId, roomCode);
+                    await Clients.Group(roomCode).SendAsync("UserJoined", roomInfo);
+                    _logger.LogInformation($"User {userId} joined room {roomCode} in Wating state");
+                }
             }
             catch (Exception ex)
             {

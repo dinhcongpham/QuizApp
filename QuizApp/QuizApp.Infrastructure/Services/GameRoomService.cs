@@ -180,6 +180,47 @@ namespace QuizApp.QuizApp.Core.Services
             }
         }
 
+        public async Task<(GameRoomDto, GameStateDto, LeaderboardSnapshotDto)> JoinRoomWhenProgressAsync(string roomCode, int userId) 
+        {
+            try
+            {
+                _logger.LogInformation("User {UserId} attempting to join room {RoomCode} when in progress", userId, roomCode);
+
+                var room = await GetRoomAsync(roomCode);
+                if (room == null)
+                {
+                    throw new ArgumentException($"Room {roomCode} not found");
+                }
+                if (room.Status != RoomStatus.InProgress.ToString())
+                {
+                    throw new InvalidOperationException("Cannot join a room that is not in progress");
+                }
+                // Add user to participants if not already there
+                if (!room.Participants.Any(p => p.UserId == userId))
+                {
+                    var username = (await _userRepository.GetByIdAsync(userId))?.FullName ?? "Player";
+                    room.Participants.Add(new RoomParticipantDto
+                    {
+                        UserId = userId,
+                        JoinedAt = DateTime.UtcNow,
+                        UserName = username
+                    });
+                    // Update room in cache
+                    _cache.Set($"{ROOM_PREFIX}{roomCode}", room);
+                }
+                // Get game state and leaderboard
+                var gameState = await GetGameStateAsync(roomCode);
+                var leaderboard = await GetLeaderboardAsync(roomCode, gameState.CurrentQuestionIndex);
+                _logger.LogInformation("User {UserId} joined room {RoomCode} successfully", userId, roomCode);
+                return (room, gameState, leaderboard);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error joining room {RoomCode} by user {UserId}", roomCode, userId);
+                throw;
+            }
+        }
+
         public async Task<GameStateDto> StartGameAsync(string roomCode)
         {
             try

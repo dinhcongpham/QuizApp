@@ -49,7 +49,7 @@ namespace QuizApp.QuizApp.Infrastructure.Data
                 .HasOne(q => q.Quiz)
                 .WithMany(qz => qz.Questions)
                 .HasForeignKey(q => q.QuizId)
-                .OnDelete(DeleteBehavior.NoAction);
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<Question>()
                 .HasIndex(q => q.QuizId)
