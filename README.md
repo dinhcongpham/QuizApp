@@ -1,4 +1,4 @@
-# Link github Front-end: ![Link](https://github.com/dinhcongpham/quiz-app-vite)
+# Link github Front-end: [Link](https://github.com/dinhcongpham/quiz-app-vite)
 
 # QuizApp
 
