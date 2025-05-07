@@ -82,48 +82,60 @@ docker-compose up
 4. **Access The Application**:
 - Open your browser and navigate to `http://localhost:5079/swagger` to view the API documentation.
 
-## UI
+## User Interface Overview
 
-- Login UI
-![login](images/login_screen.png)
+#### **1. Login**
+- Allows users to authenticate using their credentials.  
+  ![Login](images/login_screen.png)
 
-- Register UI
-![register](images/register_screen.png)
+#### **2. Register**
+- New users can create an account by providing required registration information.  
+  ![Register](images/register_screen.png)
 
-- ForgotPassword UI
-![forgotPassword](images/forgot_pass_screen.png)
+#### **3. Forgot Password**
+- Users can request a password reset. A new password will be sent via email.  
+  ![Forgot Password](images/forgot_pass_screen.png)
 
-- Home UI
-![home](images/home_screen.png)
+#### **4. Home**
+- Displays all available quizzes. Users can search quizzes by name.  
+  ![Home](images/home_screen.png)
 
-- Manage Quizs
-![manage_quiz](images/manage_quiz_screen.png)
+#### **5. Manage Quizzes**
+- Provides CRUD (Create, Read, Update, Delete) operations for quizzes.  
+  ![Manage Quizzes](images/manage_quiz_screen.png)
 
-- Manage Question
-![manage_question](images/manag_questions_quiz_screen.png)
+#### **6. Manage Questions**
+- Enables management of questions associated with each quiz. Includes CRUD functionality.  
+  ![Manage Questions](images/manag_questions_quiz_screen.png)
 
-- How to play
-![play](images/play_in_home_screen.png)
+#### **7. How to Play**
+- Users can select a quiz and create a room to start a session.  
+  ![How to Play](images/play_in_home_screen.png)
 
-- Waiting Room
-![waiting_room](images/waiting_room_screen.png)
+#### **8. Waiting Room**
+- Displays waiting area for the game. Users can join later or start the game once ready.  
+  ![Waiting Room](images/waiting_room_screen.png)
 
-- In game
-![in_game](images/in_game_screen.png)
+#### **9. In-Game**
+- Each question has a countdown timer. The leaderboard updates after each question.  
+  ![In-Game](images/in_game_screen.png)
 
-- Finish game
-![result](images/finish_game_screen.png)
+#### **10. Game Results**
+- Shows final results, including accuracy, rank, total score, and detailed question outcomes.  
+  ![Finish Game](images/finish_game_screen.png)
 
-- Profile
-![profile](images/profile_screen.png)
+#### **11. Profile**
+- Displays user statistics such as total quizzes created, total participants, and accuracy rate.  
+  ![Profile](images/profile_screen.png)
 
-- History game
-![history](images/history_quiz_result.png)
+#### **12. Game History**
+- Lists all previously participated quizzes and their details.  
+  ![Game History](images/history_quiz_result.png)  
+  ![Detailed History](images/details_history_quiz_result.png)
 
-![details_history](images/details_history_quiz_result.png)
-
-- Setting
-![setting](images/profile_change_name_password.png)
+#### **13. Settings**
+- Allows users to update their display name and change password.  
+  ![Settings](images/profile_change_name_password.png)
 
 
 
