@@ -81,3 +81,50 @@ docker-compose up
 ```
 4. **Access The Application**:
 - Open your browser and navigate to `http://localhost:5079/swagger` to view the API documentation.
+
+## UI
+
+- Login UI
+![login](images/login_screen.png)
+
+- Register UI
+![register](images/register_screen.png)
+
+- ForgotPassword UI
+![forgotPassword](images/forgot_pass_screen.png)
+
+- Home UI
+![home](images/home_screen.png)
+
+- Manage Quizs
+![manage_quiz](images/manage_quiz_screen.png)
+
+- Manage Question
+![manage_question](images/manag_questions_quiz_screen.png)
+
+- How to play
+![play](images/play_in_home_screen.png)
+
+- Waiting Room
+![waiting_room](images/waiting_room_screen.png)
+
+- In game
+![in_game](images/in_game_screen.png)
+
+- Finish game
+![result](images/finish_game_screen.png)
+
+- Profile
+![profile](images/profile_screen.png)
+
+- History game
+![history](images/history_quiz_result.png)
+
+![details_history](images/details_history_quiz_result.png)
+
+- Setting
+![setting](images/profile_change_name_password.png)
+
+
+
+
