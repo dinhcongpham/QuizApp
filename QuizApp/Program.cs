@@ -103,8 +103,6 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 
 var app = builder.Build();
 
-app.UseCors("AllowFrontend");
-
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -112,9 +110,19 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseExceptionHandler("/error");
+
 app.UseHttpsRedirection();
+
+app.UseRouting();
+app.UseRateLimiter();
+
+app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseResponseCompression();
+app.UseResponseCaching();
 
 app.MapControllers();
 app.MapHub<GameHub>("/gameHub");
